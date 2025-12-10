@@ -1,4 +1,4 @@
-package com.github.aj1daar.dota_match_announcer;
+package com.github.aj1daar.dotaannouncer;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
