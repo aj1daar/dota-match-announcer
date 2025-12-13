@@ -2,7 +2,9 @@ package com.github.aj1daar.dotaannouncer.service;
 
 import com.github.aj1daar.dotaannouncer.bot.DotaTelegramBot;
 import com.github.aj1daar.dotaannouncer.model.Match;
+import com.github.aj1daar.dotaannouncer.model.Subscriber;
 import com.github.aj1daar.dotaannouncer.repository.MatchRepository;
+import com.github.aj1daar.dotaannouncer.repository.SubscriberRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -19,27 +21,33 @@ public class NotificationService {
 
   private final MatchRepository matchRepository;
   private final DotaTelegramBot telegramBot;
-
-  // Hardcoded Chat ID for now
-  // TODO: store ID of chats in the database
-  private final long MY_CHAT_ID = 123123123L; // Don't forget the 'L' at the end!
+  private final SubscriberRepository subscriberRepository;
 
   @Scheduled(fixedRate = 30000)
   @Transactional
   public void announceMatches() {
     List<Match> unannouncedMatches = matchRepository.findByAnnouncedFalse();
 
-    if (unannouncedMatches.isEmpty()) {
+    if (unannouncedMatches.isEmpty()) return;
+    List<Subscriber> subscribers = subscriberRepository.findAll();
+
+    if (subscribers.isEmpty()) {
+      log.info("Matches found, but no subscribers to notify.");
       return;
     }
 
-    log.info("Found {} matches to announce.", unannouncedMatches.size());
+    log.info("Announcing {} matches to {} subscribers.", unannouncedMatches.size(), subscribers.size());
 
     for (Match match : unannouncedMatches) {
       String message = formatMessage(match);
 
-
-      telegramBot.sendNotification(MY_CHAT_ID, message);
+      for (Subscriber sub : subscribers) {
+        try {
+          telegramBot.sendNotification(sub.getChatId(), message);
+        } catch (Exception e) {
+          log.error("Failed to send to {}", sub.getChatId());
+        }
+      }
 
       match.setAnnounced(true);
       matchRepository.save(match);
@@ -50,9 +58,9 @@ public class NotificationService {
     DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd MMMM HH:mm");
     return String.format(
         """
-        🏆 **New Match Announced!**
+        🏆 New Match Announced!
 
-        ⚔️ **%s** vs **%s**
+        ⚔️ %s vs %s
         🏆 Tournament: %s
         📊 Format: %s
         ⏰ Start: %s
