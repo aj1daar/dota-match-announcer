@@ -34,22 +34,22 @@ public record PandaScoreMatchDto(
     @NotNull
     @Valid
     List<OpponentWrapperDto> opponents
-) {}
+) {
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  public record LeagueDto(
+      @NotNull String name
+  ) {}
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-record LeagueDto(
-    @NotNull String name
-) {}
-
-// PandaScore structure is slightly weird:
+  // PandaScore structure is slightly weird:
 // "opponents": [ { "opponent": { "name": "Team Spirit" } } ]
-@JsonIgnoreProperties(ignoreUnknown = true)
-record OpponentWrapperDto(
-    @Valid OpponentDto opponent
-) {}
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  public record OpponentWrapperDto(
+      @Valid OpponentDto opponent
+  ) {}
 
-@JsonIgnoreProperties(ignoreUnknown = true)
-record OpponentDto(
-    @NotNull String name,
-    String acronym
-) {}
+  @JsonIgnoreProperties(ignoreUnknown = true)
+  public record OpponentDto(
+      @NotNull String name,
+      String acronym
+  ) {}
+}

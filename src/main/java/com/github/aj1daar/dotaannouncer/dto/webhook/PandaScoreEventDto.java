@@ -27,10 +27,10 @@ public record PandaScoreEventDto(
     @Valid // <--- This is crucial! It tells Java to validate the object inside.
     @NotNull
     PayloadDto payload
-) {}
-
-record PayloadDto(
-    @Valid
-    @NotNull
-    PandaScoreMatchDto object
-) {}
+) {
+    public record PayloadDto(
+        @Valid
+        @NotNull
+        PandaScoreMatchDto object
+    ) {}
+}
