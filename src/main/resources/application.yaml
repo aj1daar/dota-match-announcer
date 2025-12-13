@@ -15,6 +15,11 @@ spring:
       hibernate:
         format_sql: true
 
+telegram:
+  bot:
+    token: ${TELEGRAM_BOT_TOKEN}
+    chat-id: ${TELEGRAM_CHAT_ID}
+
 pandascore:
   token: ${PANDASCORE_TOKEN}
   base-url: https://api.pandascore.co
