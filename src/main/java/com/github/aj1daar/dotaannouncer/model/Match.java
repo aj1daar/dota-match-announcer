@@ -26,4 +26,6 @@ public class Match {
     private MatchFormat format;
 
     private boolean announced;
+
+    public String getDisplayName() { return teamOne + " vs " + teamTwo; }
 }
