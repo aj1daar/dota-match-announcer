@@ -55,16 +55,14 @@ public class MatchPollingService {
       match.setTournamentName(dto.league().name());
     }
 
-    if (dto.opponents() != null && !dto.opponents().isEmpty()) {
-      match.setTeamOne(dto.opponents().getFirst().opponent().name());
-    } else {
-      match.setTeamOne("TBD");
+    if (dto.opponents() != null && dto.opponents().size() >= 1) {
+      var op1 = dto.opponents().getFirst().opponent();
+      match.setTeamOneDetails(op1.id(), op1.name());
     }
 
     if (dto.opponents() != null && dto.opponents().size() >= 2) {
-      match.setTeamTwo(dto.opponents().get(1).opponent().name());
-    } else {
-      match.setTeamTwo("TBD");
+      var op2 = dto.opponents().get(1).opponent();
+      match.setTeamOneDetails(op2.id(), op2.name());
     }
 
     match.setAnnounced(false);

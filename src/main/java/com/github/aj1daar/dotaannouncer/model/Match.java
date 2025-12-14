@@ -17,6 +17,8 @@ public class Match {
     @Id
     private Long id;
 
+    private Long teamOneId;
+    private Long teamTwoId;
     private String teamOne;
     private String teamTwo;
     private String tournamentName;
@@ -28,4 +30,15 @@ public class Match {
     private boolean announced;
 
     public String getDisplayName() { return teamOne + " vs " + teamTwo; }
+
+    // Add this helper method inside your Match class
+    public void setTeamOneDetails(Long id, String name) {
+        this.teamOneId = id;
+        this.teamOne = name;
+    }
+
+    public void setTeamTwoDetails(Long id, String name) {
+        this.teamTwoId = id;
+        this.teamTwo = name;
+    }
 }

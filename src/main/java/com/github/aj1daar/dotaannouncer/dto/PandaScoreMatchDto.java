@@ -49,6 +49,7 @@ public record PandaScoreMatchDto(
 
   @JsonIgnoreProperties(ignoreUnknown = true)
   public record OpponentDto(
+      @NotNull Long id,
       @NotNull String name,
       String acronym
   ) {}

@@ -10,12 +10,10 @@ import java.time.LocalDateTime;
 
 public record PandaScoreEventDto(
 
-    // Zod equivalent: z.string().regex(/match_.*/)
     @NotNull
     @Pattern(regexp = "match_.*", message = "Event type must start with 'match_'")
     String type,
 
-    // Zod equivalent: z.string()
     @JsonProperty("event_id")
     @NotNull
     String eventId,
@@ -23,8 +21,7 @@ public record PandaScoreEventDto(
     @JsonProperty("created_at")
     LocalDateTime createdAt,
 
-    // Zod equivalent: z.object({...})
-    @Valid // <--- This is crucial! It tells Java to validate the object inside.
+    @Valid
     @NotNull
     PayloadDto payload
 ) {
