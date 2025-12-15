@@ -3,8 +3,10 @@ package com.github.aj1daar.dotaannouncer.service;
 import com.github.aj1daar.dotaannouncer.bot.DotaTelegramBot;
 import com.github.aj1daar.dotaannouncer.model.Match;
 import com.github.aj1daar.dotaannouncer.model.Subscriber;
+import com.github.aj1daar.dotaannouncer.model.TeamSubscription;
 import com.github.aj1daar.dotaannouncer.repository.MatchRepository;
 import com.github.aj1daar.dotaannouncer.repository.SubscriberRepository;
+import com.github.aj1daar.dotaannouncer.repository.TeamSubscriptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -12,7 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -22,36 +26,50 @@ public class NotificationService {
   private final MatchRepository matchRepository;
   private final DotaTelegramBot telegramBot;
   private final SubscriberRepository subscriberRepository;
+  private final TeamSubscriptionRepository teamSubscriptionRepository;
 
   @Scheduled(fixedRate = 30000)
   @Transactional
   public void announceMatches() {
     List<Match> unannouncedMatches = matchRepository.findByAnnouncedFalse();
 
-    if (unannouncedMatches.isEmpty()) return;
-    List<Subscriber> subscribers = subscriberRepository.findAll();
-
-    if (subscribers.isEmpty()) {
-      log.info("Matches found, but no subscribers to notify.");
-      return;
-    }
-
-    log.info("Announcing {} matches to {} subscribers.", unannouncedMatches.size(), subscribers.size());
-
     for (Match match : unannouncedMatches) {
-      String message = formatMessage(match);
+      Set<Long> subscriberIds = findSubscribersForMatch(match);
 
-      for (Subscriber sub : subscribers) {
-        try {
-          telegramBot.sendNotification(sub.getChatId(), message);
-        } catch (Exception e) {
-          log.error("Failed to send to {}", sub.getChatId());
+      if (!subscriberIds.isEmpty()) {
+        String message = formatMessage(match);
+
+        for  (Long subscriberId : subscriberIds) {
+          try {
+            telegramBot.sendNotification(subscriberId, message);
+          } catch (Exception e) {
+            log.error("Failed to send to {}", subscriberId);
+          }
         }
       }
 
       match.setAnnounced(true);
       matchRepository.save(match);
+      if (!subscriberIds.isEmpty()) {
+        log.info("Announced match {} to {} subscribers", match.getId(), subscriberIds.size());
+      }
     }
+  }
+
+  private Set<Long> findSubscribersForMatch(Match match) {
+    Set<Long> chatIds = new HashSet<>();
+
+    if (match.getTeamOneId() != null) {
+      List<TeamSubscription> subs1 = teamSubscriptionRepository.findByTeamId(match.getTeamOneId());
+      subs1.forEach(sub -> chatIds.add(sub.getSubscriber().getChatId()));
+    }
+
+    if (match.getTeamTwoId() != null) {
+      List<TeamSubscription> subs2 = teamSubscriptionRepository.findByTeamId(match.getTeamTwoId());
+      subs2.forEach(sub -> chatIds.add(sub.getSubscriber().getChatId()));
+    }
+
+    return chatIds;
   }
 
   private String formatMessage(Match match) {
