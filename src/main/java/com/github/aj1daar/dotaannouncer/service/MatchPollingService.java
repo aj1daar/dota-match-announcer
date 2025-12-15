@@ -55,14 +55,14 @@ public class MatchPollingService {
       match.setTournamentName(dto.league().name());
     }
 
-    if (dto.opponents() != null && dto.opponents().size() >= 1) {
+    if (dto.opponents() != null && !dto.opponents().isEmpty()) {
       var op1 = dto.opponents().getFirst().opponent();
       match.setTeamOneDetails(op1.id(), op1.name());
     }
 
     if (dto.opponents() != null && dto.opponents().size() >= 2) {
       var op2 = dto.opponents().get(1).opponent();
-      match.setTeamOneDetails(op2.id(), op2.name());
+      match.setTeamTwoDetails(op2.id(), op2.name());
     }
 
     match.setAnnounced(false);

@@ -2,10 +2,8 @@ package com.github.aj1daar.dotaannouncer.service;
 
 import com.github.aj1daar.dotaannouncer.bot.DotaTelegramBot;
 import com.github.aj1daar.dotaannouncer.model.Match;
-import com.github.aj1daar.dotaannouncer.model.Subscriber;
 import com.github.aj1daar.dotaannouncer.model.TeamSubscription;
 import com.github.aj1daar.dotaannouncer.repository.MatchRepository;
-import com.github.aj1daar.dotaannouncer.repository.SubscriberRepository;
 import com.github.aj1daar.dotaannouncer.repository.TeamSubscriptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +23,6 @@ public class NotificationService {
 
   private final MatchRepository matchRepository;
   private final DotaTelegramBot telegramBot;
-  private final SubscriberRepository subscriberRepository;
   private final TeamSubscriptionRepository teamSubscriptionRepository;
 
   @Scheduled(fixedRate = 30000)
