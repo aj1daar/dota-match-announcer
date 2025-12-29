@@ -1,9 +1,18 @@
 services:
   postgres:
-    image: 'postgres:latest'
-    environment:
-      - 'POSTGRES_DB=mydatabase'
-      - 'POSTGRES_PASSWORD=secret'
-      - 'POSTGRES_USER=myuser'
+    image: postgres:latest
+    container_name: dota_postgres
     ports:
-      - '5432:5432'
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-dotadb}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secret}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:-dotadb}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

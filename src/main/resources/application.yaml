@@ -4,16 +4,18 @@ server:
 spring:
   application:
     name: dota-match-announcer
-  docker:
-    compose:
-      enabled: true
-
+  datasource:
+    url: jdbc:postgresql://localhost:5432/${POSTGRES_DB:dotadb}
+    username: postgres
+    password: ${POSTGRES_PASSWORD:secret}
+    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: update
     properties:
       hibernate:
         format_sql: true
+    show-sql: true
 
 telegram:
   bot:
