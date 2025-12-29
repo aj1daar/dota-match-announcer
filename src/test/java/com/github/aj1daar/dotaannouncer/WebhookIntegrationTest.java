@@ -17,7 +17,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,19 +64,18 @@ class WebhookIntegrationTest {
                 "object": {
                   "id": 1001,
                   "name": "Team Liquid vs Gaimin Gladiators",
-                  "begin_at": "2025-12-14T20:00:00Z",
+                  "begin_at": "2025-12-30T20:00:00Z",
                   "number_of_games": 3,
                   "league": { "name": "Riyadh Masters 2025" },
                   "opponents": [
-                    { "opponent": { "name": "Team Liquid" } },
-                    { "opponent": { "name": "Gaimin Gladiators" } }
+                    { "opponent": { "id": 1, "name": "Team Liquid" } },
+                    { "opponent": { "id": 2, "name": "Gaimin Gladiators" } }
                   ]
                 }
               }
             }
         """;
 
-    // B. Send the Request (using RestAssured)
     RestAssured.given()
         .contentType(ContentType.JSON)
         .body(jsonPayload)
@@ -86,12 +84,9 @@ class WebhookIntegrationTest {
         .then()
         .statusCode(200);
 
-    // C. Verify the Database
     List<Match> matches = matchRepository.findAll();
     assertThat(matches).hasSize(1);
-    assertThat(matches.get(0).getTeamOne()).isEqualTo("Team Liquid");
-    assertThat(matches.get(0).getTournamentName()).isEqualTo("Riyadh Masters 2025");
-
-    System.out.println("TEST PASSED: Match was successfully saved to Docker DB!");
+    assertThat(matches.getFirst().getTeamOne()).isEqualTo("Team Liquid");
+    assertThat(matches.getFirst().getTournamentName()).isEqualTo("Riyadh Masters 2025");
   }
 }

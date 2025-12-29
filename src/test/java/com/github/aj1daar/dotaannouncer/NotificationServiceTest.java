@@ -4,8 +4,9 @@ import com.github.aj1daar.dotaannouncer.bot.DotaTelegramBot;
 import com.github.aj1daar.dotaannouncer.model.Match;
 import com.github.aj1daar.dotaannouncer.model.MatchFormat;
 import com.github.aj1daar.dotaannouncer.model.Subscriber;
+import com.github.aj1daar.dotaannouncer.model.TeamSubscription;
 import com.github.aj1daar.dotaannouncer.repository.MatchRepository;
-import com.github.aj1daar.dotaannouncer.repository.SubscriberRepository;
+import com.github.aj1daar.dotaannouncer.repository.TeamSubscriptionRepository;
 import com.github.aj1daar.dotaannouncer.service.NotificationService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,19 +17,19 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDateTime;
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class) // Uses Mockito without loading Spring (Fast!)
+@ExtendWith(MockitoExtension.class)
 class NotificationServiceTest {
 
   @Mock
   private MatchRepository matchRepository;
 
+
   @Mock
-  private SubscriberRepository subscriberRepository;
+  private TeamSubscriptionRepository teamSubscriptionRepository;
 
   @Mock
   private DotaTelegramBot telegramBot;
@@ -38,32 +39,33 @@ class NotificationServiceTest {
 
   @Test
   void shouldAnnounceMatches_AndMarkAsAnnounced() {
-    // 1. Arrange (Prepare the fake data)
     Match match = new Match();
     match.setId(100L);
     match.setTeamOne("Team Spirit");
+    match.setTeamOneId(1001L);
     match.setTeamTwo("OG");
+    match.setTeamTwoId(1002L);
     match.setTournamentName("The International");
     match.setFormat(MatchFormat.valueOf("BO3"));
     match.setStartTime(LocalDateTime.now());
-    match.setAnnounced(false); // Important!
+    match.setAnnounced(false);
 
     Subscriber subscriber = new Subscriber(12345L, "Atai", LocalDateTime.now());
 
-    // Teach the mocks what to return
-    when(matchRepository.findByAnnouncedFalse()).thenReturn(List.of(match));
-    when(subscriberRepository.findAll()).thenReturn(List.of(subscriber));
+    TeamSubscription teamSubscription = new TeamSubscription();
+    teamSubscription.setSubscriber(subscriber);
+    teamSubscription.setTeamId(1001L);
+    teamSubscription.setTeamName("Team Spirit");
 
-    // 2. Act (Run the method)
+    when(matchRepository.findByAnnouncedFalse()).thenReturn(List.of(match));
+    when(teamSubscriptionRepository.findByTeamId(1001L)).thenReturn(List.of(teamSubscription));
+    when(teamSubscriptionRepository.findByTeamId(1002L)).thenReturn(List.of());
+
     notificationService.announceMatches();
 
-    // 3. Assert (Verify what happened)
-
-    // Verify bot was called with the correct Chat ID
     verify(telegramBot, times(1)).sendNotification(eq(12345L), anyString());
 
-    // Verify the match was saved with 'announced = true'
-    match.setAnnounced(true); // We expect the service to have done this
+    match.setAnnounced(true);
     verify(matchRepository, times(1)).save(match);
   }
 }
