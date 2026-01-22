@@ -1,5 +1,6 @@
 package com.github.aj1daar.dotaannouncer.bot
 
+import com.github.aj1daar.dotaannouncer.bot.help.HelpRegistry
 import com.github.aj1daar.dotaannouncer.dto.PandaScoreTeamDto
 import com.github.aj1daar.dotaannouncer.model.Subscriber
 import com.github.aj1daar.dotaannouncer.model.TeamSubscription
@@ -41,6 +42,13 @@ class DotaTelegramBot(
                     saveSubscriber(chatId, firstName)
                     sendNotification(chatId, "👋 Welcome $firstName! Use /search team <name> to follow a team.")
                 }
+
+                text.startsWith("/help") -> {
+                    val helpText = HelpRegistry.commands.joinToString(separator = "\n") { cmd ->
+                        "${cmd.command} - ${cmd.description}"
+                    }
+                    sendNotification(chatId, "📖 Available commands:\n$helpText")
+                }
                 text.startsWith("/search team ") -> {
                     val query = text.substringAfter("/search team ").trim()
                     if (query.isNotEmpty()) {
@@ -49,6 +57,8 @@ class DotaTelegramBot(
                         sendNotification(chatId, "⚠️ Please type a team name. Example:\n/search team Spirit")
                     }
                 }
+                else -> sendNotification(chatId, "❓ Unknown command. Use /help for more commands.");
+
             }
         }
 
