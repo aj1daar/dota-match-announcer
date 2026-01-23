@@ -21,6 +21,9 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -90,9 +93,10 @@ class CallbackHandlerTest {
     @Test
     @DisplayName("Should unsubscribe from team when user is subscribed")
     void shouldUnsubscribeFromTeamWhenSubscribed() {
-        when(teamSubscriptionRepository.existsBySubscriberChatIdAndTeamId(CHAT_ID, TEAM_ID)).thenReturn(true);
+        TeamSubscription subscription = new TeamSubscription(TEAM_ID, TEAM_NAME, new Subscriber(CHAT_ID, "User", LocalDateTime.now()));
+        when(teamSubscriptionRepository.findBySubscriberChatIdAndTeamId(CHAT_ID, TEAM_ID)).thenReturn(Optional.of(subscription));
 
-        handler.handleCallback(CHAT_ID, "UNSUB_TEAM:" + TEAM_ID + ":" + TEAM_NAME);
+        handler.handleCallback(CHAT_ID, "UNSUB_TEAM:" + TEAM_ID);
 
         verify(teamSubscriptionRepository).deleteBySubscriberChatIdAndTeamId(CHAT_ID, TEAM_ID);
         verify(notificationService).sendNotification(eq(CHAT_ID), contains("unfollowed"));
@@ -102,21 +106,21 @@ class CallbackHandlerTest {
     @Test
     @DisplayName("Should handle unsubscribe when user is not subscribed")
     void shouldHandleUnsubscribeWhenNotSubscribed() {
-        when(teamSubscriptionRepository.existsBySubscriberChatIdAndTeamId(CHAT_ID, TEAM_ID)).thenReturn(false);
+        when(teamSubscriptionRepository.findBySubscriberChatIdAndTeamId(CHAT_ID, TEAM_ID)).thenReturn(Optional.empty());
 
-        handler.handleCallback(CHAT_ID, "UNSUB_TEAM:" + TEAM_ID + ":" + TEAM_NAME);
+        handler.handleCallback(CHAT_ID, "UNSUB_TEAM:" + TEAM_ID);
 
         verify(teamSubscriptionRepository, never()).deleteBySubscriberChatIdAndTeamId(anyLong(), anyLong());
         verify(notificationService).sendNotification(eq(CHAT_ID), contains("not following"));
-        verify(notificationService).sendNotification(eq(CHAT_ID), contains(TEAM_NAME));
     }
 
     @Test
     @DisplayName("Should verify deleteBySubscriberChatIdAndTeamId is called with correct parameters")
     void shouldCallDeleteWithCorrectParameters() {
-        when(teamSubscriptionRepository.existsBySubscriberChatIdAndTeamId(CHAT_ID, TEAM_ID)).thenReturn(true);
+        TeamSubscription subscription = new TeamSubscription(TEAM_ID, TEAM_NAME, new Subscriber(CHAT_ID, "User", LocalDateTime.now()));
+        when(teamSubscriptionRepository.findBySubscriberChatIdAndTeamId(CHAT_ID, TEAM_ID)).thenReturn(Optional.of(subscription));
 
-        handler.handleCallback(CHAT_ID, "UNSUB_TEAM:" + TEAM_ID + ":" + TEAM_NAME);
+        handler.handleCallback(CHAT_ID, "UNSUB_TEAM:" + TEAM_ID);
 
         verify(teamSubscriptionRepository, times(1)).deleteBySubscriberChatIdAndTeamId(eq(CHAT_ID), eq(TEAM_ID));
     }
@@ -142,11 +146,12 @@ class CallbackHandlerTest {
     @Test
     @DisplayName("Should handle unsubscribe for team with special characters in name")
     void shouldHandleUnsubscribeWithSpecialCharactersInTeamName() {
-        String specialTeamName = "Tundra Esports [EU]";
         Long specialTeamId = 1234L;
-        when(teamSubscriptionRepository.existsBySubscriberChatIdAndTeamId(CHAT_ID, specialTeamId)).thenReturn(true);
+        String specialTeamName = "Tundra Esports [EU]";
+        TeamSubscription subscription = new TeamSubscription(specialTeamId, specialTeamName, new Subscriber(CHAT_ID, "User", LocalDateTime.now()));
+        when(teamSubscriptionRepository.findBySubscriberChatIdAndTeamId(CHAT_ID, specialTeamId)).thenReturn(Optional.of(subscription));
 
-        handler.handleCallback(CHAT_ID, "UNSUB_TEAM:" + specialTeamId + ":" + specialTeamName);
+        handler.handleCallback(CHAT_ID, "UNSUB_TEAM:" + specialTeamId);
 
         verify(teamSubscriptionRepository).deleteBySubscriberChatIdAndTeamId(CHAT_ID, specialTeamId);
         verify(notificationService).sendNotification(eq(CHAT_ID), contains(specialTeamName));
@@ -170,11 +175,14 @@ class CallbackHandlerTest {
         String teamName1 = "Team A";
         String teamName2 = "Team B";
 
-        when(teamSubscriptionRepository.existsBySubscriberChatIdAndTeamId(CHAT_ID, teamId1)).thenReturn(true);
-        when(teamSubscriptionRepository.existsBySubscriberChatIdAndTeamId(CHAT_ID, teamId2)).thenReturn(true);
+        TeamSubscription sub1 = new TeamSubscription(teamId1, teamName1, new Subscriber(CHAT_ID, "User", LocalDateTime.now()));
+        TeamSubscription sub2 = new TeamSubscription(teamId2, teamName2, new Subscriber(CHAT_ID, "User", LocalDateTime.now()));
 
-        handler.handleCallback(CHAT_ID, "UNSUB_TEAM:" + teamId1 + ":" + teamName1);
-        handler.handleCallback(CHAT_ID, "UNSUB_TEAM:" + teamId2 + ":" + teamName2);
+        when(teamSubscriptionRepository.findBySubscriberChatIdAndTeamId(CHAT_ID, teamId1)).thenReturn(Optional.of(sub1));
+        when(teamSubscriptionRepository.findBySubscriberChatIdAndTeamId(CHAT_ID, teamId2)).thenReturn(Optional.of(sub2));
+
+        handler.handleCallback(CHAT_ID, "UNSUB_TEAM:" + teamId1);
+        handler.handleCallback(CHAT_ID, "UNSUB_TEAM:" + teamId2);
 
         verify(teamSubscriptionRepository).deleteBySubscriberChatIdAndTeamId(CHAT_ID, teamId1);
         verify(teamSubscriptionRepository).deleteBySubscriberChatIdAndTeamId(CHAT_ID, teamId2);

@@ -47,7 +47,8 @@ class MyTeamsCommandHandler(
             val teamId = (sub as Any).javaClass.getMethod("getTeamId").invoke(sub) as Long
             val button = InlineKeyboardButton().apply {
                 text = "❌ Unfollow: $teamName"
-                callbackData = "UNSUB_TEAM:$teamId:$teamName"
+                // Keep callback data short to avoid Telegram 64-byte limit
+                callbackData = "UNSUB_TEAM:$teamId"
             }
             listOf(button)
         }

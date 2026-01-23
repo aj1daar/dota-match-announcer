@@ -44,18 +44,20 @@ class CallbackHandler(
     }
 
     private fun handleTeamUnsubscription(chatId: Long, data: String) {
-        // Format: UNSUB_TEAM:1234:TeamName
+        // New format: UNSUB_TEAM:1234 (team name is fetched from DB)
         val parts = data.split(":")
-        if (parts.size < 3) return
+        if (parts.size < 2) return
 
-        val teamId = parts[1].toLong()
-        val teamName = parts[2]
+        val teamId = parts[1].toLongOrNull() ?: return
 
-        if (teamSubscriptionRepository.existsBySubscriberChatIdAndTeamId(chatId, teamId)) {
+        val subscriptionOpt = teamSubscriptionRepository.findBySubscriberChatIdAndTeamId(chatId, teamId)
+        if (subscriptionOpt.isPresent) {
+            val subscription = subscriptionOpt.get()
+            val teamName = (subscription as Any).javaClass.getMethod("getTeamName").invoke(subscription) as String
             teamSubscriptionRepository.deleteBySubscriberChatIdAndTeamId(chatId, teamId)
             notificationService.getObject().sendNotification(chatId, "✅ You have unfollowed **$teamName**!")
         } else {
-            notificationService.getObject().sendNotification(chatId, "ℹ️ You are not following $teamName.")
+            notificationService.getObject().sendNotification(chatId, "ℹ️ You are not following this team.")
         }
     }
 }

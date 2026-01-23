@@ -15,7 +15,14 @@ spring:
     properties:
       hibernate:
         format_sql: true
-    show-sql: true
+    show-sql: false
+
+logging:
+  level:
+    org.hibernate.SQL: warn
+    org.hibernate.orm.jdbc.bind: warn
+    org.springframework.orm.jpa: info
+    org.springframework.transaction: info
 
 telegram:
   bot-token: ${TELEGRAM_BOT_TOKEN}
