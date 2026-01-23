@@ -3,6 +3,7 @@ package com.github.aj1daar.dotaannouncer.bot
 import com.github.aj1daar.dotaannouncer.bot.handler.CallbackHandler
 import com.github.aj1daar.dotaannouncer.bot.handler.CommandHandler
 import com.github.aj1daar.dotaannouncer.bot.handler.HelpCommandHandler
+import com.github.aj1daar.dotaannouncer.bot.handler.MyTeamsCommandHandler
 import com.github.aj1daar.dotaannouncer.bot.handler.SearchTeamCommandHandler
 import com.github.aj1daar.dotaannouncer.bot.handler.StartCommandHandler
 import com.github.aj1daar.dotaannouncer.bot.service.NotificationService
@@ -22,13 +23,15 @@ class DotaTelegramBot(
     private val startCommandHandler: StartCommandHandler,
     helpCommandHandler: HelpCommandHandler,
     searchTeamCommandHandler: SearchTeamCommandHandler,
+    myTeamsCommandHandler: MyTeamsCommandHandler,
     private val callbackHandler: CallbackHandler
 ) : TelegramLongPollingBot(token), NotificationService {
 
     private val commandHandlers: List<CommandHandler> = listOf(
         startCommandHandler,
         helpCommandHandler,
-        searchTeamCommandHandler
+        searchTeamCommandHandler,
+        myTeamsCommandHandler
     )
 
     override fun getBotUsername(): String = botName
@@ -50,7 +53,7 @@ class DotaTelegramBot(
                     return
                 }
             }
-            
+
             sendNotification(chatId, "❓ Unknown command. Use /help for more commands.")
         }
 

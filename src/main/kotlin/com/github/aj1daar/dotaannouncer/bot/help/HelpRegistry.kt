@@ -4,7 +4,8 @@ class HelpRegistry {
     val commands: List<HelpCommand> = listOf(
         HelpCommand("/start", "Register and get a welcome message."),
         HelpCommand("/help", "Show available commands."),
-        HelpCommand("/search team <name>", "Search for a Dota team and follow it.")
+        HelpCommand("/search_team <name>", "Search for a Dota team and follow it."),
+        HelpCommand("/my_teams", "Show all teams you are following.")
     )
 
     val byCommand: Map<String, HelpCommand> = commands.associateBy { it.command }

@@ -1,5 +1,6 @@
 package com.github.aj1daar.dotaannouncer;
 
+import com.github.aj1daar.dotaannouncer.config.DotenvConfig;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -9,7 +10,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class DotaMatchAnnouncerApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(DotaMatchAnnouncerApplication.class, args);
+		SpringApplication app = new SpringApplication(DotaMatchAnnouncerApplication.class);
+		app.addInitializers(new DotenvConfig());
+		app.run(args);
 	}
 
 }

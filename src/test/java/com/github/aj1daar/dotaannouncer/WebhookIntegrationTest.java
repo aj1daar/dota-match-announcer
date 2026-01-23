@@ -26,8 +26,8 @@ import static org.assertj.core.api.Assertions.assertThat;
     properties = {
         "telegram.bot-token=test_token_123",
         "telegram.bot-username=TestBot",
-        "telegram.admin-chat-id=12345",
-        "pandascore.token=test_panda_token"
+        "pandascore.token=test_panda_token",
+        "pandascore.base-url=https://api.pandascore.co"
     }
 )
 @Testcontainers
@@ -59,14 +59,14 @@ class WebhookIntegrationTest {
             {
               "type": "match_created",
               "event_id": "evt_TEST_123",
-              "created_at": "2025-12-13T12:00:00Z",
+              "created_at": "2026-01-23T12:00:00Z",
               "payload": {
                 "object": {
                   "id": 1001,
                   "name": "Team Liquid vs Gaimin Gladiators",
-                  "begin_at": "2025-12-30T20:00:00Z",
+                  "begin_at": "2026-02-15T20:00:00Z",
                   "number_of_games": 3,
-                  "league": { "name": "Riyadh Masters 2025" },
+                  "league": { "name": "Riyadh Masters 2026" },
                   "opponents": [
                     { "opponent": { "id": 1, "name": "Team Liquid" } },
                     { "opponent": { "id": 2, "name": "Gaimin Gladiators" } }
@@ -87,6 +87,6 @@ class WebhookIntegrationTest {
     List<Match> matches = matchRepository.findAll();
     assertThat(matches).hasSize(1);
     assertThat(matches.getFirst().getTeamOne()).isEqualTo("Team Liquid");
-    assertThat(matches.getFirst().getTournamentName()).isEqualTo("Riyadh Masters 2025");
+    assertThat(matches.getFirst().getTournamentName()).isEqualTo("Riyadh Masters 2026");
   }
 }
