@@ -5,6 +5,7 @@ import com.github.aj1daar.dotaannouncer.bot.handler.CommandHandler
 import com.github.aj1daar.dotaannouncer.bot.handler.HelpCommandHandler
 import com.github.aj1daar.dotaannouncer.bot.handler.SearchTeamCommandHandler
 import com.github.aj1daar.dotaannouncer.bot.handler.StartCommandHandler
+import com.github.aj1daar.dotaannouncer.bot.service.NotificationService
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import org.telegram.telegrambots.bots.TelegramLongPollingBot
@@ -22,7 +23,7 @@ class DotaTelegramBot(
     helpCommandHandler: HelpCommandHandler,
     searchTeamCommandHandler: SearchTeamCommandHandler,
     private val callbackHandler: CallbackHandler
-) : TelegramLongPollingBot(token) {
+) : TelegramLongPollingBot(token), NotificationService {
 
     private val commandHandlers: List<CommandHandler> = listOf(
         startCommandHandler,
@@ -38,21 +39,18 @@ class DotaTelegramBot(
             val text = update.message.text
             val firstName = update.message.from.firstName
 
-            // Handle /start command with user's first name
             if (text == "/start") {
                 startCommandHandler.handleWithName(chatId, firstName)
                 return
             }
 
-            // Delegate to appropriate handler
             for (handler in commandHandlers) {
                 if (handler.canHandle(text)) {
                     handler.handle(chatId, text)
                     return
                 }
             }
-
-            // Unknown command
+            
             sendNotification(chatId, "❓ Unknown command. Use /help for more commands.")
         }
 
@@ -64,7 +62,7 @@ class DotaTelegramBot(
         }
     }
 
-    fun sendNotification(chatId: Long, text: String) {
+    override fun sendNotification(chatId: Long, text: String) {
         val message = SendMessage(chatId.toString(), text)
         execute(message)
     }

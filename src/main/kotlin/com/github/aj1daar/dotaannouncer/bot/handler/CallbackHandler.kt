@@ -1,9 +1,10 @@
 package com.github.aj1daar.dotaannouncer.bot.handler
 
-import com.github.aj1daar.dotaannouncer.bot.DotaTelegramBot
+import com.github.aj1daar.dotaannouncer.bot.service.NotificationService
 import com.github.aj1daar.dotaannouncer.model.TeamSubscription
 import com.github.aj1daar.dotaannouncer.repository.SubscriberRepository
 import com.github.aj1daar.dotaannouncer.repository.TeamSubscriptionRepository
+import org.springframework.beans.factory.ObjectProvider
 import org.springframework.stereotype.Component
 
 @Component
@@ -11,7 +12,7 @@ import org.springframework.stereotype.Component
 class CallbackHandler(
     private val subscriberRepository: SubscriberRepository,
     private val teamSubscriptionRepository: TeamSubscriptionRepository,
-    private val bot: DotaTelegramBot
+    private val notificationService: ObjectProvider<NotificationService>
 ) {
     @Suppress("UNUSED")
     fun handleCallback(chatId: Long, data: String) {
@@ -33,9 +34,9 @@ class CallbackHandler(
             if (!teamSubscriptionRepository.existsBySubscriberChatIdAndTeamId(chatId, teamId)) {
                 val subscription = TeamSubscription(teamId, teamName, subscriber)
                 teamSubscriptionRepository.save(subscription)
-                bot.sendNotification(chatId, "✅ You are now following **$teamName**!")
+                notificationService.getObject().sendNotification(chatId, "✅ You are now following **$teamName**!")
             } else {
-                bot.sendNotification(chatId, "ℹ️ You are already following $teamName.")
+                notificationService.getObject().sendNotification(chatId, "ℹ️ You are already following $teamName.")
             }
         }
     }
