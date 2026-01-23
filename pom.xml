@@ -113,8 +113,18 @@
 				<groupId>org.jetbrains.kotlin</groupId>
 				<artifactId>kotlin-maven-plugin</artifactId>
 				<version>1.9.22</version>
+				<dependencies>
+					<dependency>
+						<groupId>org.jetbrains.kotlin</groupId>
+						<artifactId>kotlin-maven-allopen</artifactId>
+						<version>${kotlin.version}</version>
+					</dependency>
+				</dependencies>
 				<configuration>
 					<jvmTarget>21</jvmTarget>
+					<compilerPlugins>
+						<plugin>spring</plugin>
+					</compilerPlugins>
 				</configuration>
 				<executions>
 					<execution>

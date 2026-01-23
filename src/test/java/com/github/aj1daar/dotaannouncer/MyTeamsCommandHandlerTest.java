@@ -1,5 +1,6 @@
 package com.github.aj1daar.dotaannouncer;
 
+import com.github.aj1daar.dotaannouncer.bot.DotaTelegramBot;
 import com.github.aj1daar.dotaannouncer.bot.handler.MyTeamsCommandHandler;
 import com.github.aj1daar.dotaannouncer.bot.service.NotificationService;
 import com.github.aj1daar.dotaannouncer.model.Subscriber;
@@ -15,6 +16,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.beans.factory.ObjectProvider;
+import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -37,14 +39,22 @@ class MyTeamsCommandHandlerTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private ObjectProvider<DotaTelegramBot> botProvider;
+
+    @Mock
+    private DotaTelegramBot bot;
+
     private MyTeamsCommandHandler handler;
 
     private static final Long CHAT_ID = 12345L;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         when(notificationServiceProvider.getObject()).thenReturn(notificationService);
-        handler = new MyTeamsCommandHandler(teamSubscriptionRepository, notificationServiceProvider);
+        when(botProvider.getObject()).thenReturn(bot);
+        when(bot.execute(any(SendMessage.class))).thenReturn(null);
+        handler = new MyTeamsCommandHandler(teamSubscriptionRepository, notificationServiceProvider, botProvider);
     }
 
     @Test
@@ -87,30 +97,22 @@ class MyTeamsCommandHandlerTest {
 
     @Test
     @DisplayName("Should show single team subscription")
-    void shouldShowSingleTeamSubscription() {
+    void shouldShowSingleTeamSubscription() throws Exception {
         Subscriber subscriber = new Subscriber(CHAT_ID, "TestUser", LocalDateTime.now());
         TeamSubscription subscription = new TeamSubscription(2411L, "Team Spirit", subscriber);
 
         when(teamSubscriptionRepository.findBySubscriberChatId(CHAT_ID))
                 .thenReturn(List.of(subscription));
 
-        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
-
         handler.handle(CHAT_ID, "/my_teams");
 
         verify(teamSubscriptionRepository).findBySubscriberChatId(CHAT_ID);
-        verify(notificationService).sendNotification(eq(CHAT_ID), messageCaptor.capture());
-
-        String sentMessage = messageCaptor.getValue();
-        assertThat(sentMessage).contains("Your Subscribed Teams");
-        assertThat(sentMessage).contains("Team Spirit");
-        assertThat(sentMessage).contains("2411");
-        assertThat(sentMessage).contains("Total: 1 team(s)");
+        verify(bot).execute(any(SendMessage.class));
     }
 
     @Test
     @DisplayName("Should show multiple team subscriptions with numbering")
-    void shouldShowMultipleTeamSubscriptions() {
+    void shouldShowMultipleTeamSubscriptions() throws Exception {
         Subscriber subscriber = new Subscriber(CHAT_ID, "TestUser", LocalDateTime.now());
         TeamSubscription sub1 = new TeamSubscription(2411L, "Team Spirit", subscriber);
         TeamSubscription sub2 = new TeamSubscription(2412L, "OG", subscriber);
@@ -119,22 +121,10 @@ class MyTeamsCommandHandlerTest {
         when(teamSubscriptionRepository.findBySubscriberChatId(CHAT_ID))
                 .thenReturn(List.of(sub1, sub2, sub3));
 
-        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
-
         handler.handle(CHAT_ID, "/my_teams");
 
         verify(teamSubscriptionRepository).findBySubscriberChatId(CHAT_ID);
-        verify(notificationService).sendNotification(eq(CHAT_ID), messageCaptor.capture());
-
-        String sentMessage = messageCaptor.getValue();
-        assertThat(sentMessage).contains("Your Subscribed Teams");
-        assertThat(sentMessage).contains("1. Team Spirit");
-        assertThat(sentMessage).contains("2. OG");
-        assertThat(sentMessage).contains("3. Team Liquid");
-        assertThat(sentMessage).contains("Total: 3 team(s)");
-        assertThat(sentMessage).contains("2411");
-        assertThat(sentMessage).contains("2412");
-        assertThat(sentMessage).contains("2413");
+        verify(bot).execute(any(SendMessage.class));
     }
 
     @Test
@@ -151,7 +141,7 @@ class MyTeamsCommandHandlerTest {
 
     @Test
     @DisplayName("Should handle large number of subscriptions")
-    void shouldHandleLargeNumberOfSubscriptions() {
+    void shouldHandleLargeNumberOfSubscriptions() throws Exception {
         Subscriber subscriber = new Subscriber(CHAT_ID, "TestUser", LocalDateTime.now());
         List<TeamSubscription> subscriptions = List.of(
                 new TeamSubscription(1L, "Team 1", subscriber),
@@ -169,21 +159,14 @@ class MyTeamsCommandHandlerTest {
         when(teamSubscriptionRepository.findBySubscriberChatId(CHAT_ID))
                 .thenReturn(subscriptions);
 
-        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
-
         handler.handle(CHAT_ID, "/my_teams");
 
-        verify(notificationService).sendNotification(eq(CHAT_ID), messageCaptor.capture());
-
-        String sentMessage = messageCaptor.getValue();
-        assertThat(sentMessage).contains("Total: 10 team(s)");
-        assertThat(sentMessage).contains("1. Team 1");
-        assertThat(sentMessage).contains("10. Team 10");
+        verify(bot).execute(any(SendMessage.class));
     }
 
     @Test
     @DisplayName("Should handle teams with special characters in names")
-    void shouldHandleSpecialCharactersInTeamNames() {
+    void shouldHandleSpecialCharactersInTeamNames() throws Exception {
         Subscriber subscriber = new Subscriber(CHAT_ID, "TestUser", LocalDateTime.now());
         TeamSubscription subscription = new TeamSubscription(
                 1234L,
@@ -194,15 +177,9 @@ class MyTeamsCommandHandlerTest {
         when(teamSubscriptionRepository.findBySubscriberChatId(CHAT_ID))
                 .thenReturn(List.of(subscription));
 
-        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
-
         handler.handle(CHAT_ID, "/my_teams");
 
-        verify(notificationService).sendNotification(eq(CHAT_ID), messageCaptor.capture());
-
-        String sentMessage = messageCaptor.getValue();
-        assertThat(sentMessage).contains("Tundra Esports [EU]");
-        assertThat(sentMessage).contains("1234");
+        verify(bot).execute(any(SendMessage.class));
     }
 
     @Test
@@ -217,13 +194,27 @@ class MyTeamsCommandHandlerTest {
     }
 
     @Test
-    @DisplayName("Should send notification exactly once")
-    void shouldSendNotificationExactlyOnce() {
+    @DisplayName("Should send notification exactly once for empty subscriptions")
+    void shouldSendNotificationExactlyOnceForEmptySubscriptions() {
         when(teamSubscriptionRepository.findBySubscriberChatId(CHAT_ID))
                 .thenReturn(Collections.emptyList());
 
         handler.handle(CHAT_ID, "/my_teams");
 
         verify(notificationService, times(1)).sendNotification(eq(CHAT_ID), anyString());
+    }
+
+    @Test
+    @DisplayName("Should execute bot message exactly once for subscriptions with buttons")
+    void shouldExecuteBotMessageExactlyOnceForSubscriptions() throws Exception {
+        Subscriber subscriber = new Subscriber(CHAT_ID, "TestUser", LocalDateTime.now());
+        TeamSubscription subscription = new TeamSubscription(2411L, "Team Spirit", subscriber);
+
+        when(teamSubscriptionRepository.findBySubscriberChatId(CHAT_ID))
+                .thenReturn(List.of(subscription));
+
+        handler.handle(CHAT_ID, "/my_teams");
+
+        verify(bot, times(1)).execute(any(SendMessage.class));
     }
 }

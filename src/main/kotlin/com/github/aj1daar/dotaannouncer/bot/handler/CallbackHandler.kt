@@ -18,6 +18,8 @@ class CallbackHandler(
     fun handleCallback(chatId: Long, data: String) {
         if (data.startsWith("SUB_TEAM:")) {
             handleTeamSubscription(chatId, data)
+        } else if (data.startsWith("UNSUB_TEAM:")) {
+            handleTeamUnsubscription(chatId, data)
         }
     }
 
@@ -38,6 +40,22 @@ class CallbackHandler(
             } else {
                 notificationService.getObject().sendNotification(chatId, "ℹ️ You are already following $teamName.")
             }
+        }
+    }
+
+    private fun handleTeamUnsubscription(chatId: Long, data: String) {
+        // Format: UNSUB_TEAM:1234:TeamName
+        val parts = data.split(":")
+        if (parts.size < 3) return
+
+        val teamId = parts[1].toLong()
+        val teamName = parts[2]
+
+        if (teamSubscriptionRepository.existsBySubscriberChatIdAndTeamId(chatId, teamId)) {
+            teamSubscriptionRepository.deleteBySubscriberChatIdAndTeamId(chatId, teamId)
+            notificationService.getObject().sendNotification(chatId, "✅ You have unfollowed **$teamName**!")
+        } else {
+            notificationService.getObject().sendNotification(chatId, "ℹ️ You are not following $teamName.")
         }
     }
 }
