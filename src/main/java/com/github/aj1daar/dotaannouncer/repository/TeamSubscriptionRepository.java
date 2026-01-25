@@ -2,6 +2,8 @@ package com.github.aj1daar.dotaannouncer.repository;
 
 import com.github.aj1daar.dotaannouncer.model.TeamSubscription;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -14,6 +16,8 @@ public interface TeamSubscriptionRepository extends JpaRepository<TeamSubscripti
   List<TeamSubscription> findBySubscriberChatId(Long chatId);
   Optional<TeamSubscription> findBySubscriberChatIdAndTeamId(Long chatId, Long teamId);
 
+  @Modifying
   @Transactional
-  void deleteBySubscriberChatIdAndTeamId(Long chatId, Long teamId);
+  @Query("DELETE FROM TeamSubscription ts WHERE ts.subscriber.chatId = :chatId AND ts.teamId = :teamId")
+  int deleteBySubscriberChatIdAndTeamId(Long chatId, Long teamId);
 }

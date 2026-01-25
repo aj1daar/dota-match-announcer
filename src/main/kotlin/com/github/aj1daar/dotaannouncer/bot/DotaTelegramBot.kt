@@ -1,6 +1,6 @@
 package com.github.aj1daar.dotaannouncer.bot
 
-import com.github.aj1daar.dotaannouncer.bot.handler.CallbackHandler
+import com.github.aj1daar.dotaannouncer.bot.handler.CallbackQueryHandler
 import com.github.aj1daar.dotaannouncer.bot.handler.CommandHandler
 import com.github.aj1daar.dotaannouncer.bot.handler.HelpCommandHandler
 import com.github.aj1daar.dotaannouncer.bot.handler.MyTeamsCommandHandler
@@ -24,8 +24,9 @@ class DotaTelegramBot(
     helpCommandHandler: HelpCommandHandler,
     searchTeamCommandHandler: SearchTeamCommandHandler,
     myTeamsCommandHandler: MyTeamsCommandHandler,
-    private val callbackHandler: CallbackHandler
+    private val callbackHandlers: List<CallbackQueryHandler>
 ) : TelegramLongPollingBot(token), NotificationService {
+
 
     private val commandHandlers: List<CommandHandler> = listOf(
         startCommandHandler,
@@ -41,27 +42,25 @@ class DotaTelegramBot(
             val chatId = update.message.chatId
             val text = update.message.text
             val firstName = update.message.from.firstName
-
             if (text == "/start") {
                 startCommandHandler.handleWithName(chatId, firstName)
-                return
-            }
+                return }
 
             for (handler in commandHandlers) {
                 if (handler.canHandle(text)) {
                     handler.handle(chatId, text)
-                    return
-                }
+                    return }
             }
 
             sendNotification(chatId, "❓ Unknown command. Use /help for more commands.")
-        }
+            return }
 
         if (update.hasCallbackQuery()) {
             val callback = update.callbackQuery
             val data = callback.data
             val chatId = callback.message.chatId
-            callbackHandler.handleCallback(chatId, data)
+            callbackHandlers.firstOrNull { it.canHandle(data) }
+                ?.handle(chatId, data, update)
         }
     }
 
@@ -69,4 +68,5 @@ class DotaTelegramBot(
         val message = SendMessage(chatId.toString(), text)
         execute(message)
     }
+
 }
