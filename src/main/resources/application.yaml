@@ -19,9 +19,11 @@ spring:
 
 logging:
   level:
+    root: warn
+    com.github.aj1daar.dota: info
     org.hibernate.SQL: warn
     org.hibernate.orm.jdbc.bind: warn
-    org.springframework.orm.jpa: info
+    org.springframework.orm.jpa: warn
     org.springframework.transaction: info
 
 telegram:
