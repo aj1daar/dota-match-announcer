@@ -33,7 +33,6 @@ public class DotenvConfig implements ApplicationContextInitializer<ConfigurableA
             // Load all .env variables into a map
             dotenv.entries().forEach(entry -> {
                 dotenvProperties.put(entry.getKey(), entry.getValue());
-                System.out.println("✅ Loaded from .env: " + entry.getKey() + "=***");
             });
 
             // Add as a property source with high priority
