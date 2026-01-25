@@ -1,6 +1,7 @@
 package com.github.aj1daar.dotaannouncer.config;
 
 import io.github.cdimascio.dotenv.Dotenv;
+import org.jetbrains.annotations.NotNull;
 import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.ConfigurableEnvironment;
@@ -17,7 +18,7 @@ import java.util.Map;
 public class DotenvConfig implements ApplicationContextInitializer<ConfigurableApplicationContext> {
 
     @Override
-    public void initialize(ConfigurableApplicationContext applicationContext) {
+    public void initialize(@NotNull ConfigurableApplicationContext applicationContext) {
         try {
             // Load .env from project root
             String envFilePath = new File(".").getAbsolutePath().replace(".", "");
@@ -31,9 +32,7 @@ public class DotenvConfig implements ApplicationContextInitializer<ConfigurableA
             Map<String, Object> dotenvProperties = new HashMap<>();
 
             // Load all .env variables into a map
-            dotenv.entries().forEach(entry -> {
-                dotenvProperties.put(entry.getKey(), entry.getValue());
-            });
+            dotenv.entries().forEach(entry -> dotenvProperties.put(entry.getKey(), entry.getValue()));
 
             // Add as a property source with high priority
             if (!dotenvProperties.isEmpty()) {
