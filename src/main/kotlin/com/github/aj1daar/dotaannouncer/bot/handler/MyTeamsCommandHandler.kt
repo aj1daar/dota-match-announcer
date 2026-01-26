@@ -32,15 +32,13 @@ class MyTeamsCommandHandler(
         }
 
         val teamsList = buildTeamsList(subscriptions)
-        val messageText = """
-        📋 Your Subscribed Teams:
+        val messageText = """📋 Your Subscribed Teams:
 
-        $teamsList
+$teamsList
 
-        Total: ${subscriptions.size} team(s)
+Total: ${subscriptions.size} team(s)
 
-        Click a button below to unfollow a team:
-        """.trimIndent()
+Click a button below to unfollow a team:"""
 
         val rows = subscriptions.map { sub ->
             val teamName = (sub as Any).javaClass.getMethod("getTeamName").invoke(sub) as String
@@ -64,8 +62,7 @@ class MyTeamsCommandHandler(
     private fun buildTeamsList(subscriptions: List<TeamSubscription>): String {
         return subscriptions.mapIndexed { index, sub ->
             val teamName = (sub as Any).javaClass.getMethod("getTeamName").invoke(sub) as String
-            val teamId = (sub as Any).javaClass.getMethod("getTeamId").invoke(sub) as Long
-            "   ${index + 1}. $teamName (ID: $teamId)"
+            "${index + 1}. $teamName"
         }.joinToString("\n")
     }
 }
