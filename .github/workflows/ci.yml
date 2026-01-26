@@ -24,7 +24,7 @@ jobs:
       run: chmod +x mvnw
 
     - name: Build and Run Tests
-      run: ./mvnw clean verify -DskipITs=false
+      run: ./mvnw clean verify -DskipITs=false -DTELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}" -DTELEGRAM_BOT_USERNAME="${{ secrets.TELEGRAM_BOT_USERNAME }}" -DPANDASCORE_ACCESS_TOKEN="${{ secrets.PANDASCORE_ACCESS_TOKEN }}"
       env:
         POSTGRES_DB: testdb
         POSTGRES_PASSWORD: testpass
