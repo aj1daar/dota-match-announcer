@@ -56,11 +56,14 @@ class DotaTelegramBot(
             return }
 
         if (update.hasCallbackQuery()) {
-            val callback = update.callbackQuery
-            val data = callback.data
-            val chatId = callback.message.chatId
-            callbackHandlers.firstOrNull { it.canHandle(data) }
-                ?.handle(chatId, data, update)
+            val data = update.callbackQuery.data ?: return
+            if (data.startsWith("SUB_TEAM:")) {
+                val parts = data.split(":", limit =3)
+                val teamId = parts.getOrNull(1)?.toLongOrNull() ?: return
+                val teamName = parts.getOrNull(2) ?: ""
+                execute(SendMessage(update.callbackQuery.message.chatId.toString(),
+                    "Now following $teamName"))
+                return }
         }
     }
 
