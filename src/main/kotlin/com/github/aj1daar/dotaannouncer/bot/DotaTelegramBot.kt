@@ -60,11 +60,19 @@ class DotaTelegramBot(
             callbackHandlers.firstOrNull { it.canHandle(data) }
                 ?.handle(callbackQuery.message.chatId, data, update)
 
-            val teamName = data.substringAfterLast(":").ifBlank { "team" }
+            val ackText = when {
+                data.startsWith("SUB_TEAM:") -> {
+                    val teamName = data.substringAfterLast(":").ifBlank { "team" }
+                    "✅ Now following $teamName"
+                }
+                data.startsWith("UNSUB_TEAM:") -> "✅ Team unfollowed"
+                else -> "ℹ️ Callback processed"
+            }
+
             execute(
                 AnswerCallbackQuery().apply {
                     callbackQueryId = callbackQuery.id
-                    text = "✅ Now following $teamName" // short (<200 chars)
+                    text = ackText
                     showAlert = false }
             )
         }

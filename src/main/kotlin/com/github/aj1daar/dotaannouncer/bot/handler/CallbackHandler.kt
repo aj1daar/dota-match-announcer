@@ -46,7 +46,7 @@ class CallbackHandler(
             if (!teamSubscriptionRepository.existsBySubscriberChatIdAndTeamId(chatId, teamId)) {
                 val subscription = TeamSubscription(teamId, teamName, subscriber)
                 teamSubscriptionRepository.save(subscription)
-                notificationService.getObject().sendNotification(chatId, "✅ You are now following **$teamName**!")
+                notificationService.getObject().sendNotification(chatId, "✅ You are now following $teamName!")
             } else {
                 notificationService.getObject().sendNotification(chatId, "ℹ️ You are already following $teamName.")
             }
