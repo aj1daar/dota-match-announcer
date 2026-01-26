@@ -6,6 +6,7 @@ import com.github.aj1daar.dotaannouncer.repository.SubscriberRepository
 import com.github.aj1daar.dotaannouncer.repository.TeamSubscriptionRepository
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.stereotype.Component
+import org.telegram.telegrambots.meta.api.objects.Update
 
 @Component
 @Suppress("UNUSED")
@@ -13,18 +14,27 @@ class CallbackHandler(
     private val subscriberRepository: SubscriberRepository,
     private val teamSubscriptionRepository: TeamSubscriptionRepository,
     private val notificationService: ObjectProvider<NotificationService>
-) {
+) : CallbackQueryHandler {
+
     @Suppress("UNUSED")
     fun handleCallback(chatId: Long, data: String) {
-        if (data.startsWith("SUB_TEAM:")) {
-            handleTeamSubscription(chatId, data)
-        } else if (data.startsWith("UNSUB_TEAM:")) {
-            handleTeamUnsubscription(chatId, data)
+        when {
+            data.startsWith("SUB_TEAM:") -> handleTeamSubscription(chatId, data)
+            data.startsWith("UNSUB_TEAM:") -> handleTeamUnsubscription(chatId, data)
+            else -> {
+                notificationService.getObject().sendNotification(chatId, "❓ Unknown callback received.")
+            }
         }
     }
 
+    override fun canHandle(callbackData: String): Boolean = callbackData.startsWith("SUB_TEAM:")
+
+    override fun handle(chatId: Long, callbackData: String, update: Update) {
+        handleTeamSubscription(chatId, callbackData)
+    }
+
     private fun handleTeamSubscription(chatId: Long, data: String) {
-        // Format: SUB_TEAM:1234:TeamName
+
         val parts = data.split(":")
         if (parts.size < 3) return
 
@@ -44,7 +54,6 @@ class CallbackHandler(
     }
 
     private fun handleTeamUnsubscription(chatId: Long, data: String) {
-        // New format: UNSUB_TEAM:1234 (team name is fetched from DB)
         val parts = data.split(":")
         if (parts.size < 2) return
 
@@ -55,7 +64,7 @@ class CallbackHandler(
             val subscription = subscriptionOpt.get()
             val teamName = (subscription as Any).javaClass.getMethod("getTeamName").invoke(subscription) as String
             teamSubscriptionRepository.deleteBySubscriberChatIdAndTeamId(chatId, teamId)
-            notificationService.getObject().sendNotification(chatId, "✅ You have unfollowed **$teamName**!")
+            notificationService.getObject().sendNotification(chatId, "✅ You have unfollowed $teamName!")
         } else {
             notificationService.getObject().sendNotification(chatId, "ℹ️ You are not following this team.")
         }

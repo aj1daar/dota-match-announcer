@@ -10,6 +10,7 @@ import com.github.aj1daar.dotaannouncer.bot.service.NotificationService
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 import org.telegram.telegrambots.bots.TelegramLongPollingBot
+import org.telegram.telegrambots.meta.api.methods.AnswerCallbackQuery
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage
 import org.telegram.telegrambots.meta.api.objects.Update
 
@@ -45,25 +46,27 @@ class DotaTelegramBot(
             if (text == "/start") {
                 startCommandHandler.handleWithName(chatId, firstName)
                 return }
-
             for (handler in commandHandlers) {
                 if (handler.canHandle(text)) {
                     handler.handle(chatId, text)
                     return }
             }
-
             sendNotification(chatId, "❓ Unknown command. Use /help for more commands.")
             return }
 
         if (update.hasCallbackQuery()) {
-            val data = update.callbackQuery.data ?: return
-            if (data.startsWith("SUB_TEAM:")) {
-                val parts = data.split(":", limit =3)
-                val teamId = parts.getOrNull(1)?.toLongOrNull() ?: return
-                val teamName = parts.getOrNull(2) ?: ""
-                execute(SendMessage(update.callbackQuery.message.chatId.toString(),
-                    "Now following $teamName"))
-                return }
+            val callbackQuery = update.callbackQuery
+            val data = callbackQuery.data ?: return
+            callbackHandlers.firstOrNull { it.canHandle(data) }
+                ?.handle(callbackQuery.message.chatId, data, update)
+
+            val teamName = data.substringAfterLast(":").ifBlank { "team" }
+            execute(
+                AnswerCallbackQuery().apply {
+                    callbackQueryId = callbackQuery.id
+                    text = "✅ Now following $teamName" // short (<200 chars)
+                    showAlert = false }
+            )
         }
     }
 
