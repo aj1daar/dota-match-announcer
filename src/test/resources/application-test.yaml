@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: dota-match-announcer
+  datasource:
+    driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: create-drop
