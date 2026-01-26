@@ -26,14 +26,15 @@ jobs:
     - name: Build and Run Tests
       run: ./mvnw clean verify -DskipITs=false
       env:
-        # Test environment variables
-        TELEGRAM_BOT_TOKEN: test_token_123
-        TELEGRAM_BOT_USERNAME: TestBot
-        PANDASCORE_ACCESS_TOKEN: test_panda_token
         POSTGRES_DB: testdb
         POSTGRES_PASSWORD: testpass
         # Testcontainers configuration
         TESTCONTAINERS_RYUK_DISABLED: false
+
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_BOT_USERNAME: ${{ secrets.TELEGRAM_BOT_USERNAME }}
+        PANDASCORE_ACCESS_TOKEN: ${{ secrets.PANDASCORE_ACCESS_TOKEN }}
+
 
     - name: Upload Test Results
       if: always()

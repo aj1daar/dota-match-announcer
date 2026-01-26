@@ -6,6 +6,12 @@ target/
 
 ### Local environment files ###
 .env
+.env.local
+.env.*.local
+*.env
+*.pem
+*.key
+secrets/
 
 ### STS ###
 .apt_generated
