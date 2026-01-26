@@ -16,7 +16,8 @@ class MyTeamsCommandHandler(
     private val teamSubscriptionRepository: TeamSubscriptionRepository,
     private val notificationService: ObjectProvider<NotificationService>,
     private val bot: ObjectProvider<DotaTelegramBot>,
-    private val messageCleanupService: MessageCleanupService
+    private val messageCleanupService: MessageCleanupService,
+    private val keyboardService: com.github.aj1daar.dotaannouncer.bot.service.KeyboardService
 ) : CommandHandler {
     override fun canHandle(command: String): Boolean {
         return command == "/my_teams" || command == "/myteams"
@@ -26,9 +27,11 @@ class MyTeamsCommandHandler(
         val subscriptions = teamSubscriptionRepository.findBySubscriberChatId(chatId)
 
         if (subscriptions.isEmpty()) {
-            notificationService.getObject().sendNotification(
+            val keyboard = keyboardService.createMainMenuKeyboard()
+            notificationService.getObject().sendNotificationWithKeyboard(
                 chatId,
-                "📋 You are not following any teams yet.\n\nUse /search_team <name> to find and follow teams."
+                "📋 You are not following any teams yet.\n\nUse 🔍 Search Team to find and follow teams.",
+                keyboard
             )
             return
         }
@@ -51,7 +54,14 @@ Click a button below to unfollow a team:"""
                 callbackData = "UNSUB_TEAM:$teamId"
             }
             listOf(button)
+        }.toMutableList()
+
+        // Add "Back to Main Menu" button at the end
+        val backButton = InlineKeyboardButton().apply {
+            text = "🏠 Main Menu"
+            callbackData = "MAIN_MENU"
         }
+        rows.add(listOf(backButton))
 
         val markup = InlineKeyboardMarkup().apply { keyboard = rows }
         val message = SendMessage(chatId.toString(), messageText).apply {

@@ -25,7 +25,8 @@ class DotaTelegramBot(
     helpCommandHandler: HelpCommandHandler,
     searchTeamCommandHandler: SearchTeamCommandHandler,
     myTeamsCommandHandler: MyTeamsCommandHandler,
-    private val callbackHandlers: List<CallbackQueryHandler>
+    private val callbackHandlers: List<CallbackQueryHandler>,
+    private val keyboardService: com.github.aj1daar.dotaannouncer.bot.service.KeyboardService
 ) : TelegramLongPollingBot(token), NotificationService {
 
 
@@ -41,8 +42,14 @@ class DotaTelegramBot(
     override fun onUpdateReceived(update: Update) {
         if (update.hasMessage() && update.message.hasText()) {
             val chatId = update.message.chatId
-            val text = update.message.text
+            var text = update.message.text
             val firstName = update.message.from.firstName
+
+            // Normalize keyboard button text to commands
+            if (!text.startsWith("/")) {
+                text = keyboardService.normalizeButtonText(text)
+            }
+
             if (text == "/start") {
                 startCommandHandler.handleWithName(chatId, firstName)
                 return }
@@ -66,6 +73,7 @@ class DotaTelegramBot(
                     "✅ Now following $teamName"
                 }
                 data.startsWith("UNSUB_TEAM:") -> "✅ Team unfollowed"
+                data == "MAIN_MENU" -> "🏠 Returning to Main Menu"
                 else -> "ℹ️ Callback processed"
             }
 
@@ -80,6 +88,13 @@ class DotaTelegramBot(
 
     override fun sendNotification(chatId: Long, text: String) {
         val message = SendMessage(chatId.toString(), text)
+        execute(message)
+    }
+
+    override fun sendNotificationWithKeyboard(chatId: Long, text: String, keyboard: org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboard) {
+        val message = SendMessage(chatId.toString(), text).apply {
+            replyMarkup = keyboard
+        }
         execute(message)
     }
 

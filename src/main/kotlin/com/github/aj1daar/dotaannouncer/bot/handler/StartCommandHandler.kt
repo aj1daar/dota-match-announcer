@@ -10,7 +10,8 @@ import java.time.LocalDateTime
 @Component
 class StartCommandHandler(
     private val subscriberRepository: SubscriberRepository,
-    private val notificationService: ObjectProvider<NotificationService>
+    private val notificationService: ObjectProvider<NotificationService>,
+    private val keyboardService: com.github.aj1daar.dotaannouncer.bot.service.KeyboardService
 ) : CommandHandler {
     override fun canHandle(command: String): Boolean {
         return command == "/start"
@@ -19,7 +20,12 @@ class StartCommandHandler(
     override fun handle(chatId: Long, command: String) {
         val firstName = "User" // This will be passed from the bot
         saveSubscriber(chatId, firstName)
-        notificationService.getObject().sendNotification(chatId, "👋 Welcome $firstName! Use /search team <name> to follow a team.")
+        val keyboard = keyboardService.createMainMenuKeyboard()
+        notificationService.getObject().sendNotificationWithKeyboard(
+            chatId,
+            "👋 Welcome $firstName!\n\nChoose an option from the menu below:",
+            keyboard
+        )
     }
 
     private fun saveSubscriber(chatId: Long, name: String) {
@@ -33,6 +39,11 @@ class StartCommandHandler(
     @Suppress("UNUSED")
     fun handleWithName(chatId: Long, firstName: String) {
         saveSubscriber(chatId, firstName)
-        notificationService.getObject().sendNotification(chatId, "👋 Welcome $firstName! Use /search team <name> to follow a team.")
+        val keyboard = keyboardService.createMainMenuKeyboard()
+        notificationService.getObject().sendNotificationWithKeyboard(
+            chatId,
+            "👋 Welcome $firstName!\n\nChoose an option from the menu below:",
+            keyboard
+        )
     }
 }

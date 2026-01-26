@@ -19,7 +19,8 @@ class SearchTeamCommandHandler(
     private val bot: ObjectProvider<DotaTelegramBot>,
     private val messageCleanupService: MessageCleanupService,
     @Value("\${pandascore.token}")
-    private val pandaScoreToken: String
+    private val pandaScoreToken: String,
+    private val keyboardService: com.github.aj1daar.dotaannouncer.bot.service.KeyboardService
 ) : CommandHandler {
 
     private val logger = LoggerFactory.getLogger(SearchTeamCommandHandler::class.java)
@@ -31,7 +32,12 @@ class SearchTeamCommandHandler(
     override fun handle(chatId: Long, command: String) {
         val teamName = command.removePrefix("/search_team").trim()
         if (teamName.isEmpty()) {
-            bot.getObject().sendNotification(chatId, "⚠️ Please provide a team name.\n\nExample: /search_team Spirit")
+            val keyboard = keyboardService.createMainMenuKeyboard()
+            bot.getObject().execute(
+                SendMessage(chatId.toString(), "⚠️ Please provide a team name.\n\nExample: /search_team Spirit\n\nOr use the menu below:").apply {
+                    replyMarkup = keyboard
+                }
+            )
             return
         }
 
@@ -56,7 +62,12 @@ class SearchTeamCommandHandler(
         }
 
         if (teams.isEmpty()) {
-            bot.getObject().sendNotification(chatId, "❌ No teams found for '$teamName'.")
+            val keyboard = keyboardService.createMainMenuKeyboard()
+            bot.getObject().execute(
+                SendMessage(chatId.toString(), "❌ No teams found for '$teamName'.\n\nTry searching with a different name or use the menu below:").apply {
+                    replyMarkup = keyboard
+                }
+            )
             return
         }
 
@@ -66,7 +77,14 @@ class SearchTeamCommandHandler(
                 callbackData = "SUB_TEAM:${team.id()}:${team.name()}"
             }
             listOf(button)
+        }.toMutableList()
+
+        // Add "Back to Main Menu" button at the end
+        val backButton = InlineKeyboardButton().apply {
+            text = "🏠 Main Menu"
+            callbackData = "MAIN_MENU"
         }
+        rows.add(listOf(backButton))
 
         val markup = InlineKeyboardMarkup().apply { keyboard = rows }
 

@@ -48,6 +48,9 @@ class MyTeamsCommandHandlerTest {
     @Mock
     private com.github.aj1daar.dotaannouncer.bot.service.MessageCleanupService messageCleanupService;
 
+    @Mock
+    private com.github.aj1daar.dotaannouncer.bot.service.KeyboardService keyboardService;
+
     private MyTeamsCommandHandler handler;
 
     private static final Long CHAT_ID = 12345L;
@@ -61,7 +64,12 @@ class MyTeamsCommandHandlerTest {
         when(mockMessage.getMessageId()).thenReturn(12345);
         when(bot.execute(any(SendMessage.class))).thenReturn(mockMessage);
 
-        handler = new MyTeamsCommandHandler(teamSubscriptionRepository, notificationServiceProvider, botProvider, messageCleanupService);
+        // Mock keyboard service to return a simple keyboard
+        org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup mockKeyboard =
+            mock(org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup.class);
+        when(keyboardService.createMainMenuKeyboard()).thenReturn(mockKeyboard);
+
+        handler = new MyTeamsCommandHandler(teamSubscriptionRepository, notificationServiceProvider, botProvider, messageCleanupService, keyboardService);
     }
 
     @Test
@@ -95,11 +103,11 @@ class MyTeamsCommandHandlerTest {
         handler.handle(CHAT_ID, "/my_teams");
 
         verify(teamSubscriptionRepository).findBySubscriberChatId(CHAT_ID);
-        verify(notificationService).sendNotification(eq(CHAT_ID), messageCaptor.capture());
+        verify(notificationService).sendNotificationWithKeyboard(eq(CHAT_ID), messageCaptor.capture(), any());
 
         String sentMessage = messageCaptor.getValue();
         assertThat(sentMessage).contains("not following any teams");
-        assertThat(sentMessage).contains("/search_team");
+        assertThat(sentMessage).contains("Search Team");
     }
 
     @Test
@@ -143,7 +151,7 @@ class MyTeamsCommandHandlerTest {
         handler.handle(CHAT_ID, "/myteams");
 
         verify(teamSubscriptionRepository).findBySubscriberChatId(CHAT_ID);
-        verify(notificationService).sendNotification(eq(CHAT_ID), anyString());
+        verify(notificationService).sendNotificationWithKeyboard(eq(CHAT_ID), anyString(), any());
     }
 
     @Test
@@ -208,7 +216,7 @@ class MyTeamsCommandHandlerTest {
 
         handler.handle(CHAT_ID, "/my_teams");
 
-        verify(notificationService, times(1)).sendNotification(eq(CHAT_ID), anyString());
+        verify(notificationService, times(1)).sendNotificationWithKeyboard(eq(CHAT_ID), anyString(), any());
     }
 
     @Test
