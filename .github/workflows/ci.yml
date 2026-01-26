@@ -24,9 +24,15 @@ jobs:
       run: chmod +x mvnw
 
     - name: Build and Run Tests
-      run: ./mvnw verify
+      run: ./mvnw clean verify -DskipITs=false
       env:
-        # Ensure Testcontainers can access Docker
+        # Test environment variables
+        TELEGRAM_BOT_TOKEN: test_token_123
+        TELEGRAM_BOT_USERNAME: TestBot
+        PANDASCORE_ACCESS_TOKEN: test_panda_token
+        POSTGRES_DB: testdb
+        POSTGRES_PASSWORD: testpass
+        # Testcontainers configuration
         TESTCONTAINERS_RYUK_DISABLED: false
 
     - name: Upload Test Results
@@ -35,3 +41,5 @@ jobs:
       with:
         name: test-results
         path: target/surefire-reports/
+        if-no-files-found: ignore
+

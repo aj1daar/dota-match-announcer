@@ -1,0 +1,30 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: dota-match-announcer
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        format_sql: false
+    show-sql: false
+
+logging:
+  level:
+    root: warn
+    com.github.aj1daar.dota: info
+    org.hibernate.SQL: warn
+    org.hibernate.orm.jdbc.bind: warn
+    org.springframework.orm.jpa: warn
+    org.springframework.transaction: info
+
+telegram:
+  bot-token: test_token_123
+  bot-username: TestBot
+
+pandascore:
+  token: test_panda_token
+  base-url: https://api.pandascore.co
