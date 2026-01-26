@@ -25,3 +25,13 @@ jobs:
 
     - name: Build and Run Tests
       run: ./mvnw verify
+      env:
+        # Ensure Testcontainers can access Docker
+        TESTCONTAINERS_RYUK_DISABLED: false
+
+    - name: Upload Test Results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results
+        path: target/surefire-reports/
