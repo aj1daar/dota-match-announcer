@@ -1,6 +1,7 @@
 package com.github.aj1daar.dotaannouncer.bot.handler
 
 import com.github.aj1daar.dotaannouncer.bot.DotaTelegramBot
+import com.github.aj1daar.dotaannouncer.bot.service.MessageCleanupService
 import com.github.aj1daar.dotaannouncer.dto.PandaScoreTeamDto
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
@@ -16,6 +17,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 class SearchTeamCommandHandler(
     private val pandaScoreClient: RestClient,
     private val bot: ObjectProvider<DotaTelegramBot>,
+    private val messageCleanupService: MessageCleanupService,
     @Value("\${pandascore.token}")
     private val pandaScoreToken: String
 ) : CommandHandler {
@@ -72,7 +74,8 @@ class SearchTeamCommandHandler(
             replyMarkup = markup
         }
 
-        bot.getObject().execute(message)
+        val executedMessage = bot.getObject().execute(message)
+        messageCleanupService.storeMessageId(chatId, executedMessage.messageId)
     }
 }
 

@@ -43,6 +43,12 @@ class CallbackHandlerTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private com.github.aj1daar.dotaannouncer.bot.service.MessageCleanupService messageCleanupService;
+
+    @Mock
+    private ObjectProvider<com.github.aj1daar.dotaannouncer.bot.DotaTelegramBot> botProvider;
+
     private CallbackHandler handler;
 
     private static final Long CHAT_ID = 12345L;
@@ -52,7 +58,7 @@ class CallbackHandlerTest {
     @BeforeEach
     void setUp() {
         when(notificationServiceProvider.getObject()).thenReturn(notificationService);
-        handler = new CallbackHandler(subscriberRepository, teamSubscriptionRepository, notificationServiceProvider);
+        handler = new CallbackHandler(subscriberRepository, teamSubscriptionRepository, notificationServiceProvider, messageCleanupService, botProvider);
     }
 
     @Test
@@ -164,7 +170,7 @@ class CallbackHandlerTest {
 
         verify(teamSubscriptionRepository, never()).deleteBySubscriberChatIdAndTeamId(anyLong(), anyLong());
         verify(teamSubscriptionRepository, never()).save(any());
-        verify(notificationService, never()).sendNotification(anyLong(), anyString());
+        verify(notificationService).sendNotification(eq(CHAT_ID), contains("Unknown callback"));
     }
 
     @Test

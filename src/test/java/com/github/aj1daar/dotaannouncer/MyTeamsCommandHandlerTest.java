@@ -45,6 +45,9 @@ class MyTeamsCommandHandlerTest {
     @Mock
     private DotaTelegramBot bot;
 
+    @Mock
+    private com.github.aj1daar.dotaannouncer.bot.service.MessageCleanupService messageCleanupService;
+
     private MyTeamsCommandHandler handler;
 
     private static final Long CHAT_ID = 12345L;
@@ -53,8 +56,12 @@ class MyTeamsCommandHandlerTest {
     void setUp() throws Exception {
         when(notificationServiceProvider.getObject()).thenReturn(notificationService);
         when(botProvider.getObject()).thenReturn(bot);
-        when(bot.execute(any(SendMessage.class))).thenReturn(null);
-        handler = new MyTeamsCommandHandler(teamSubscriptionRepository, notificationServiceProvider, botProvider);
+
+        org.telegram.telegrambots.meta.api.objects.Message mockMessage = mock(org.telegram.telegrambots.meta.api.objects.Message.class);
+        when(mockMessage.getMessageId()).thenReturn(12345);
+        when(bot.execute(any(SendMessage.class))).thenReturn(mockMessage);
+
+        handler = new MyTeamsCommandHandler(teamSubscriptionRepository, notificationServiceProvider, botProvider, messageCleanupService);
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.github.aj1daar.dotaannouncer.bot.handler
 
 import com.github.aj1daar.dotaannouncer.bot.DotaTelegramBot
+import com.github.aj1daar.dotaannouncer.bot.service.MessageCleanupService
 import com.github.aj1daar.dotaannouncer.bot.service.NotificationService
 import com.github.aj1daar.dotaannouncer.model.TeamSubscription
 import com.github.aj1daar.dotaannouncer.repository.TeamSubscriptionRepository
@@ -14,7 +15,8 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKe
 class MyTeamsCommandHandler(
     private val teamSubscriptionRepository: TeamSubscriptionRepository,
     private val notificationService: ObjectProvider<NotificationService>,
-    private val bot: ObjectProvider<DotaTelegramBot>
+    private val bot: ObjectProvider<DotaTelegramBot>,
+    private val messageCleanupService: MessageCleanupService
 ) : CommandHandler {
     override fun canHandle(command: String): Boolean {
         return command == "/my_teams" || command == "/myteams"
@@ -56,7 +58,8 @@ Click a button below to unfollow a team:"""
             replyMarkup = markup
         }
 
-        bot.getObject().execute(message)
+        val executedMessage = bot.getObject().execute(message)
+        messageCleanupService.storeMessageId(chatId, executedMessage.messageId)
     }
 
     private fun buildTeamsList(subscriptions: List<TeamSubscription>): String {

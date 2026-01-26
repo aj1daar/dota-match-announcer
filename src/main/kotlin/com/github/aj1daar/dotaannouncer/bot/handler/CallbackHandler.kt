@@ -1,11 +1,14 @@
 package com.github.aj1daar.dotaannouncer.bot.handler
 
+import com.github.aj1daar.dotaannouncer.bot.DotaTelegramBot
+import com.github.aj1daar.dotaannouncer.bot.service.MessageCleanupService
 import com.github.aj1daar.dotaannouncer.bot.service.NotificationService
 import com.github.aj1daar.dotaannouncer.model.TeamSubscription
 import com.github.aj1daar.dotaannouncer.repository.SubscriberRepository
 import com.github.aj1daar.dotaannouncer.repository.TeamSubscriptionRepository
 import org.springframework.beans.factory.ObjectProvider
 import org.springframework.stereotype.Component
+import org.telegram.telegrambots.meta.api.methods.updatingmessages.DeleteMessage
 import org.telegram.telegrambots.meta.api.objects.Update
 
 @Component
@@ -13,7 +16,9 @@ import org.telegram.telegrambots.meta.api.objects.Update
 class CallbackHandler(
     private val subscriberRepository: SubscriberRepository,
     private val teamSubscriptionRepository: TeamSubscriptionRepository,
-    private val notificationService: ObjectProvider<NotificationService>
+    private val notificationService: ObjectProvider<NotificationService>,
+    private val messageCleanupService: MessageCleanupService,
+    private val bot: ObjectProvider<DotaTelegramBot>
 ) : CallbackQueryHandler {
 
     @Suppress("UNUSED")
@@ -34,7 +39,7 @@ class CallbackHandler(
     }
 
     private fun handleTeamSubscription(chatId: Long, data: String) {
-
+        // Format: SUB_TEAM:1234:TeamName
         val parts = data.split(":")
         if (parts.size < 3) return
 
@@ -46,6 +51,18 @@ class CallbackHandler(
             if (!teamSubscriptionRepository.existsBySubscriberChatIdAndTeamId(chatId, teamId)) {
                 val subscription = TeamSubscription(teamId, teamName, subscriber)
                 teamSubscriptionRepository.save(subscription)
+
+                // Delete the search results message
+                val lastMessageId = messageCleanupService.getLastMessageId(chatId)
+                if (lastMessageId != null) {
+                    try {
+                        bot.getObject().execute(DeleteMessage(chatId.toString(), lastMessageId))
+                        messageCleanupService.clearLastMessageId(chatId)
+                    } catch (e: Exception) {
+                        // Ignore if message deletion fails (already deleted, etc.)
+                    }
+                }
+
                 notificationService.getObject().sendNotification(chatId, "✅ You are now following $teamName!")
             } else {
                 notificationService.getObject().sendNotification(chatId, "ℹ️ You are already following $teamName.")
