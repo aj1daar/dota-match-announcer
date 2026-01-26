@@ -33,13 +33,13 @@ class MyTeamsCommandHandler(
 
         val teamsList = buildTeamsList(subscriptions)
         val messageText = """
-            📋 Your Subscribed Teams:
-            
-            $teamsList
-            
-            Total: ${subscriptions.size} team(s)
-            
-            Click a button below to unfollow a team:
+        📋 Your Subscribed Teams:
+
+        $teamsList
+
+        Total: ${subscriptions.size} team(s)
+
+        Click a button below to unfollow a team:
         """.trimIndent()
 
         val rows = subscriptions.map { sub ->
@@ -63,10 +63,9 @@ class MyTeamsCommandHandler(
 
     private fun buildTeamsList(subscriptions: List<TeamSubscription>): String {
         return subscriptions.mapIndexed { index, sub ->
-            // Use Java method calls to access Lombok-generated getters
             val teamName = (sub as Any).javaClass.getMethod("getTeamName").invoke(sub) as String
             val teamId = (sub as Any).javaClass.getMethod("getTeamId").invoke(sub) as Long
-            "${index + 1}. $teamName (ID: $teamId)"
+            "   ${index + 1}. $teamName (ID: $teamId)"
         }.joinToString("\n")
     }
 }
