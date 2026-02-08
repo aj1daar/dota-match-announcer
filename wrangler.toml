@@ -1,0 +1,23 @@
+
+name = "dota-match-announcer"
+main = "src/index.ts"
+compatibility_date = "2023-10-30"
+
+[triggers]
+crons = ["*/15 * * * *"]
+
+[vars]
+# TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN" # This should be set as a secret
+# PANDASCORE_TOKEN = "YOUR_PANDASCORE_TOKEN" # This should be set as a secret
+
+[[d1_databases]]
+binding = "D1"
+database_name = "dota-match-announcer"
+database_id = ""
+migrations_dir = "src/db"
+
+[[kv_namespaces]]
+binding = "NOTIFICATIONS_KV"
+id = "YOUR_KV_ID" # Placeholder
+preview_id = "YOUR_KV_PREVIEW_ID" # Placeholder
+

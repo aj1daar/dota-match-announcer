@@ -1,0 +1,18 @@
+DROP TABLE IF EXISTS Subscribers;
+DROP TABLE IF EXISTS TeamSubscriptions;
+
+CREATE TABLE Subscribers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    telegramId INTEGER UNIQUE NOT NULL,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE TeamSubscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subscriberId INTEGER NOT NULL,
+    teamId INTEGER NOT NULL,
+    teamName TEXT NOT NULL,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (subscriberId) REFERENCES Subscribers(id) ON DELETE CASCADE,
+    UNIQUE (subscriberId, teamId)
+);
