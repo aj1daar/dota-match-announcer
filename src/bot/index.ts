@@ -63,10 +63,6 @@ export const handleUpdate = async (request: Request, env: Env): Promise<Response
         const update = (await request.json()) as Update;
         console.log('Received Telegram update:', JSON.stringify(update, null, 2));
 
-        /*
-         * Create a mock response object that implements the required Node.js ServerResponse interface
-         * This is needed because Telegraf expects to call methods like setHeader, write, and end
-         */
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const mockResponse: any = {
             writableEnded: false,
