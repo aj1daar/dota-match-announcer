@@ -13,18 +13,16 @@ module.exports = {
         jest: true,
     },
     rules: {
-        // Basic rules for consistency
-        'indent': ['error', 4], // Enforce 4-space indentation
-        'semi': ['error', 'always'], // Require semicolons
-        'quotes': ['error', 'single'], // Prefer single quotes
-        'no-multiple-empty-lines': ['error', { 'max': 1, 'maxEOF': 0 }], // No more than 1 empty line
-        'comma-dangle': ['error', 'always-multiline'], // Enforce trailing commas
-        'no-trailing-spaces': ['error'], // Disallow trailing spaces
+        'indent': ['error', 4],
+        'semi': ['error', 'always'],
+        'quotes': ['error', 'single'],
+        'no-multiple-empty-lines': ['error', { 'max': 1, 'maxEOF': 0 }],
+        'comma-dangle': ['error', 'always-multiline'],
+        'no-trailing-spaces': ['error'],
 
-        // TypeScript specific rules (overrides or additions)
-        '@typescript-eslint/explicit-module-boundary-types': 'off', // Allow implicit return types for functions
-        '@typescript-eslint/no-explicit-any': 'off', // Allow 'any' type
-        '@typescript-eslint/no-unused-vars': [ // Configure no-unused-vars to ignore underscore-prefixed vars
+        '@typescript-eslint/explicit-module-boundary-types': 'off',
+        '@typescript-eslint/no-explicit-any': 'off',
+        '@typescript-eslint/no-unused-vars': [
             'warn',
             {
                 'argsIgnorePattern': '^_',
@@ -33,13 +31,12 @@ module.exports = {
             },
         ],
 
-        // Rule to disallow comment lines - This is a very strict set of rules
-        'no-inline-comments': 'error', // Disallow comments on the same line as code
-        'line-comment-position': ['error', { 'position': 'above' }], // Enforce position of line comments
-        'multiline-comment-style': ['error', 'starred-block'], // Enforce consistent style for multiline comments
-        'spaced-comment': ['error', 'always'], // Enforce consistent spacing after comment markers
-        'capitalized-comments': ['error', 'always'], // Enforce or disallow capitalization of the first letter of a comment
-        'no-warning-comments': ['error', { 'terms': ['todo', 'fixme', 'hack'], 'location': 'anywhere' }], // Disallow specific warning comments
+        'no-inline-comments': 'error',
+        'line-comment-position': ['error', { 'position': 'above' }],
+        'multiline-comment-style': ['error', 'starred-block'],
+        'spaced-comment': ['error', 'always'],
+        'capitalized-comments': ['error', 'always'],
+        'no-warning-comments': ['error', { 'terms': ['todo', 'fixme', 'hack'], 'location': 'anywhere' }],
         'no-var': 'off',
     },
 };
