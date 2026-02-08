@@ -1,5 +1,5 @@
 import { PandaScoreClient, Team, Match } from '../src/pandascore';
-import { Env } from '../src/index';
+import { Env } from '../src';
 
 describe('PandaScoreClient', () => {
     let client: PandaScoreClient;
@@ -25,12 +25,20 @@ describe('PandaScoreClient', () => {
             expect(fetchMock.mock.calls.length).toEqual(1);
             expect(fetchMock.mock.calls[0][0]).toContain('/teams');
             expect(fetchMock.mock.calls[0][0]).toContain('search=Test');
+            // Verify Authorization header is used
+            const requestInit = fetchMock.mock.calls[0][1] as RequestInit;
+            expect(requestInit.headers).toEqual({
+                'Authorization': 'Bearer test-token',
+                'Accept': 'application/json',
+            });
+            // Verify token is NOT in query params
+            expect(fetchMock.mock.calls[0][0]).not.toContain('token=');
         });
 
         it('should throw an error if the API returns a non-200 response', async () => {
             fetchMock.mockResponseOnce('Not Found', { status: 404 });
             await expect(client.searchTeams('Test')).rejects.toThrow(
-                'PandaScore API error: Not Found',
+                'PandaScore API error: 404 Not Found',
             );
         });
     });
@@ -83,7 +91,7 @@ describe('PandaScoreClient', () => {
         it('should throw an error if the API returns a non-200 response', async () => {
             fetchMock.mockResponseOnce('Internal Server Error', { status: 500 });
             await expect(client.getUpcomingMatches([1])).rejects.toThrow(
-                'PandaScore API error: Internal Server Error',
+                'PandaScore API error: 500 Internal Server Error',
             );
         });
     });
