@@ -27,7 +27,9 @@ function getBot(token: string, env?: Env): Telegraf<CustomContext> {
         bot.catch((err, ctx) => {
             console.error('Telegraf error:', err);
             try {
-                return ctx.reply('An error occurred. Please try again later.');
+                ctx.reply('An error occurred. Please try again later.').catch((e) => {
+                    console.error('Failed to send error message:', e);
+                });
             } catch (e) {
                 console.error('Failed to send error message:', e);
             }
@@ -64,19 +66,14 @@ export const handleUpdate = async (request: Request, env: Env): Promise<Response
         console.log('Received Telegram update:', JSON.stringify(update, null, 2));
 
         /*
-         * Use webhookCallback to handle the update properly
-         * This is the correct way to handle Telegram updates in serverless environments
-         */
-        const response = new Response();
-        const webhookCallback = bot.webhookCallback('/telegram-webhook');
-
-        /*
-         * We need to manually process the update since we can't use Express middleware
-         * Create a minimal context-like object for the middleware
+         * Manually process the update since we can't use Express middleware
+         * Create a minimal context-like object that satisfies the response interface
          */
         await bot.handleUpdate(update, {
             writableEnded: false,
-            end: () => {},
+            end: () => {
+                // No-op: response handling is handled by Telegram's webhook mechanism
+            },
         } as any);
 
         return new Response('OK', { status: 200 });
