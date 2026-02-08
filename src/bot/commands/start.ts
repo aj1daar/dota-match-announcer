@@ -15,10 +15,10 @@ export const startCommand = async (ctx: CustomContext) => {
         }
 
         const db = getDb(ctx.env);
-        let subscriber = await db.getSubscriberByTelegramId(telegramId);
+        const subscriber = await db.getSubscriberByTelegramId(telegramId);
 
         if (!subscriber) {
-            subscriber = await db.createSubscriber(telegramId);
+            await db.createSubscriber(telegramId);
             return ctx.reply(
                 'Welcome to the Dota Match Announcer Bot! You have been registered.',
             );
