@@ -13,18 +13,25 @@ describe('PandaScoreClient', () => {
     });
 
     describe('searchTeams', () => {
-        it('should return an array of teams on successful search', async () => {
-            const mockTeams: Team[] = [
+        it('should filter teams by name on successful search', async () => {
+            const allTeams: Team[] = [
                 { id: 1, name: 'Test Team 1', acronym: 'TT1', image_url: null },
-                { id: 2, name: 'Test Team 2', acronym: 'TT2', image_url: null },
+                { id: 2, name: 'Other Team', acronym: 'OT', image_url: null },
+                { id: 3, name: 'Test Team 2', acronym: 'TT2', image_url: null },
             ];
-            fetchMock.mockResponseOnce(JSON.stringify(mockTeams));
+
+            // Mock first page of results
+            fetchMock.mockResponseOnce(JSON.stringify(allTeams));
+            // Mock second page returns empty (no more pages)
+            fetchMock.mockResponseOnce(JSON.stringify([]));
 
             const teams = await client.searchTeams('Test');
-            expect(teams).toEqual(mockTeams);
-            expect(fetchMock.mock.calls.length).toEqual(1);
-            expect(fetchMock.mock.calls[0][0]).toContain('/teams');
-            expect(fetchMock.mock.calls[0][0]).toContain('search=Test');
+
+            // Should return only teams matching "Test" in name
+            expect(teams.length).toEqual(2);
+            expect(teams[0].name).toEqual('Test Team 1');
+            expect(teams[1].name).toEqual('Test Team 2');
+
             // Verify Authorization header is used
             const requestInit = fetchMock.mock.calls[0][1] as RequestInit;
             expect(requestInit.headers).toEqual({
@@ -33,6 +40,21 @@ describe('PandaScoreClient', () => {
             });
             // Verify token is NOT in query params
             expect(fetchMock.mock.calls[0][0]).not.toContain('token=');
+        });
+
+        it('should filter teams by acronym as well', async () => {
+            const allTeams: Team[] = [
+                { id: 1, name: 'Team One', acronym: 'TT', image_url: null },
+                { id: 2, name: 'Other Team', acronym: 'OT', image_url: null },
+            ];
+
+            fetchMock.mockResponseOnce(JSON.stringify(allTeams));
+            fetchMock.mockResponseOnce(JSON.stringify([]));
+
+            const teams = await client.searchTeams('OT');
+
+            expect(teams.length).toEqual(1);
+            expect(teams[0].name).toEqual('Other Team');
         });
 
         it('should throw an error if the API returns a non-200 response', async () => {
