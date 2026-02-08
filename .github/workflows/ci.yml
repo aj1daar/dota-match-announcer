@@ -81,10 +81,4 @@ jobs:
       uses: cloudflare/wrangler-action@v3
       with:
         apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        secrets: |
-          TELEGRAM_BOT_TOKEN
-          PANDASCORE_TOKEN
-      env:
-        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-        PANDASCORE_TOKEN: ${{ secrets.PANDASCORE_TOKEN }}
 
