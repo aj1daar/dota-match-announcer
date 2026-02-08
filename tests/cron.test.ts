@@ -58,7 +58,8 @@ describe('handleCron', () => {
     it('should not run if there are no subscriptions', async () => {
         (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue([]);
         (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue([]);
-        await handleCron(mockEnv, {} as ExecutionContext);
+        (mockKv.get as jest.Mock).mockResolvedValue(null);
+        await handleCron(mockEnv);
         expect(mockPandaScoreClient.getUpcomingMatches).not.toHaveBeenCalled();
     });
 
@@ -93,7 +94,7 @@ describe('handleCron', () => {
         mockPandaScoreClient.getUpcomingMatches.mockResolvedValue(matches);
         (mockKv.get as jest.Mock).mockResolvedValue(null);
 
-        await handleCron(mockEnv, {} as ExecutionContext);
+        await handleCron(mockEnv);
 
         expect(mockPandaScoreClient.getUpcomingMatches).toHaveBeenCalledWith([
             10, 20,
@@ -125,12 +126,19 @@ describe('handleCron', () => {
         (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
         (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
         mockPandaScoreClient.getUpcomingMatches.mockResolvedValue(matches);
-        (mockKv.get as jest.Mock).mockResolvedValue('true');
+        // Mock that the match notification was already sent
+        (mockKv.get as jest.Mock).mockImplementation((key: string) => {
+            if (key === 'match_1') return Promise.resolve('true');
+            if (key === 'last_match_notifications_run') return Promise.resolve(null);
+            return Promise.resolve(null);
+        });
 
-        await handleCron(mockEnv, {} as ExecutionContext);
+        await handleCron(mockEnv);
 
         expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
-        expect(mockKv.put).not.toHaveBeenCalled();
+        // Should only store the timestamp, not the match notification
+        expect(mockKv.put).toHaveBeenCalledWith('last_match_notifications_run', expect.any(String));
+        expect(mockKv.put).toHaveBeenCalledTimes(1);
     });
 
     it('should not send notification for matches more than 30 minutes away', async () => {
@@ -149,10 +157,16 @@ describe('handleCron', () => {
         (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
         (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
         mockPandaScoreClient.getUpcomingMatches.mockResolvedValue(matches);
+        (mockKv.get as jest.Mock).mockImplementation((key: string) => {
+            if (key === 'last_match_notifications_run') return Promise.resolve(null);
+            return Promise.resolve(null);
+        });
 
-        await handleCron(mockEnv, {} as ExecutionContext);
+        await handleCron(mockEnv);
 
         expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
-        expect(mockKv.put).not.toHaveBeenCalled();
+        // Should only store the timestamp, not any match notifications
+        expect(mockKv.put).toHaveBeenCalledWith('last_match_notifications_run', expect.any(String));
+        expect(mockKv.put).toHaveBeenCalledTimes(1);
     });
 });
