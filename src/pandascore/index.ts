@@ -43,6 +43,9 @@ export class PandaScoreClient {
 
     constructor(env: Env) {
         this.token = env.PANDASCORE_TOKEN;
+        if (!this.token) {
+            console.error('PANDASCORE_TOKEN is not configured');
+        }
     }
 
     private async request<T>(
@@ -50,7 +53,8 @@ export class PandaScoreClient {
         params?: Record<string, any>,
     ): Promise<T> {
         const url = new URL(`${this.baseUrl}${endpoint}`);
-        url.searchParams.append('token', this.token);
+
+        // Add query parameters
         if (params) {
             for (const key in params) {
                 if (Object.prototype.hasOwnProperty.call(params, key)) {
@@ -59,13 +63,23 @@ export class PandaScoreClient {
             }
         }
 
-        const response = await fetch(url.toString());
+        // Make request with Authorization header
+        const response = await fetch(url.toString(), {
+            headers: {
+                'Authorization': `Bearer ${this.token}`,
+                'Accept': 'application/json',
+            },
+        });
 
         if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unknown error');
             console.error(
                 `PandaScore API error: ${response.status} ${response.statusText}`,
+                'Response:', errorText,
+                'Token present:', !!this.token,
+                'Token length:', this.token?.length || 0,
             );
-            throw new Error(`PandaScore API error: ${response.statusText}`);
+            throw new Error(`PandaScore API error: ${response.status} ${response.statusText}`);
         }
 
         return response.json() as Promise<T>;

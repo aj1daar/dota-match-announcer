@@ -38,7 +38,8 @@ export const searchTeamCommand = async (ctx: CustomContext) => {
         });
     } catch (error) {
         console.error('Error in searchTeamCommand:', error);
-        return ctx.reply('An error occurred while searching for teams. Please try again.').catch(() => {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return ctx.reply(`An error occurred while searching for teams. Please try again.\n\nError: ${errorMessage}`).catch(() => {
             console.error('Failed to send error message');
         });
     }
