@@ -53,7 +53,13 @@ router.get('/', async (request: Request, env: Env) => {
     const webhookRegistered = await env.NOTIFICATIONS_KV.get('webhook_registered');
 
     if (!webhookRegistered) {
-        const webhookUrl = `${new URL(request.url).origin}${SECRET_WEBHOOK_PATH}`;
+        const url = new URL(request.url);
+        /*
+         * Force HTTPS for webhook URL (required by Telegram)
+         * This handles both localhost and ngrok tunnel cases
+         */
+        const origin = url.origin.replace('http://', 'https://');
+        const webhookUrl = `${origin}${SECRET_WEBHOOK_PATH}`;
         const success = await registerWebhook(env, webhookUrl);
         if (success) {
             await env.NOTIFICATIONS_KV.put('webhook_registered', 'true', { expirationTtl: 86400 * 30 });
