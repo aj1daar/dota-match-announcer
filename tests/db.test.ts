@@ -4,13 +4,17 @@ import { Env } from '../src/index';
 describe('D1 Database Utilities', () => {
     let mockEnv: Env;
     let mockD1: D1Database;
+    let mockStatement: any;
 
     beforeEach(() => {
-        mockD1 = {
-            prepare: jest.fn().mockReturnThis(),
+        mockStatement = {
             bind: jest.fn().mockReturnThis(),
             all: jest.fn(),
             run: jest.fn(),
+        };
+
+        mockD1 = {
+            prepare: jest.fn(() => mockStatement),
         } as unknown as D1Database;
 
         mockEnv = {
@@ -29,7 +33,7 @@ describe('D1 Database Utilities', () => {
                 telegramId: 12345,
                 createdAt: new Date().toISOString(),
             };
-            (mockD1.all as jest.Mock).mockResolvedValue({
+            mockStatement.all.mockResolvedValue({
                 results: [mockSubscriber],
             });
             const db = getDb(mockEnv);
@@ -39,8 +43,8 @@ describe('D1 Database Utilities', () => {
             expect(mockD1.prepare).toHaveBeenCalledWith(
                 'INSERT INTO Subscribers (telegramId) VALUES (?) RETURNING *',
             );
-            expect(mockD1.bind).toHaveBeenCalledWith(12345);
-            expect(mockD1.all).toHaveBeenCalled();
+            expect(mockStatement.bind).toHaveBeenCalledWith(12345);
+            expect(mockStatement.all).toHaveBeenCalled();
             expect(result).toEqual(mockSubscriber);
         });
     });
@@ -52,7 +56,7 @@ describe('D1 Database Utilities', () => {
                 telegramId: 12345,
                 createdAt: new Date().toISOString(),
             };
-            (mockD1.all as jest.Mock).mockResolvedValue({
+            mockStatement.all.mockResolvedValue({
                 results: [mockSubscriber],
             });
             const db = getDb(mockEnv);
@@ -62,12 +66,12 @@ describe('D1 Database Utilities', () => {
             expect(mockD1.prepare).toHaveBeenCalledWith(
                 'SELECT * FROM Subscribers WHERE telegramId = ?',
             );
-            expect(mockD1.bind).toHaveBeenCalledWith(12345);
+            expect(mockStatement.bind).toHaveBeenCalledWith(12345);
             expect(result).toEqual(mockSubscriber);
         });
 
         it('should return null if no subscriber exists', async () => {
-            (mockD1.all as jest.Mock).mockResolvedValue({ results: [] });
+            mockStatement.all.mockResolvedValue({ results: [] });
             const db = getDb(mockEnv);
 
             const result = await db.getSubscriberByTelegramId(12345);
@@ -85,7 +89,7 @@ describe('D1 Database Utilities', () => {
                 teamName: 'Team Liquid',
                 createdAt: new Date().toISOString(),
             };
-            (mockD1.all as jest.Mock).mockResolvedValue({
+            mockStatement.all.mockResolvedValue({
                 results: [mockSubscription],
             });
             const db = getDb(mockEnv);
@@ -95,7 +99,7 @@ describe('D1 Database Utilities', () => {
             expect(mockD1.prepare).toHaveBeenCalledWith(
                 'INSERT INTO TeamSubscriptions (subscriberId, teamId, teamName) VALUES (?, ?, ?) RETURNING *',
             );
-            expect(mockD1.bind).toHaveBeenCalledWith(1, 10, 'Team Liquid');
+            expect(mockStatement.bind).toHaveBeenCalledWith(1, 10, 'Team Liquid');
             expect(result).toEqual(mockSubscription);
         });
     });
@@ -118,7 +122,7 @@ describe('D1 Database Utilities', () => {
                     createdAt: new Date().toISOString(),
                 },
             ];
-            (mockD1.all as jest.Mock).mockResolvedValue({
+            mockStatement.all.mockResolvedValue({
                 results: mockSubscriptions,
             });
             const db = getDb(mockEnv);
@@ -128,7 +132,7 @@ describe('D1 Database Utilities', () => {
             expect(mockD1.prepare).toHaveBeenCalledWith(
                 'SELECT * FROM TeamSubscriptions WHERE subscriberId = ?',
             );
-            expect(mockD1.bind).toHaveBeenCalledWith(1);
+            expect(mockStatement.bind).toHaveBeenCalledWith(1);
             expect(result).toEqual(mockSubscriptions);
         });
     });
@@ -142,8 +146,8 @@ describe('D1 Database Utilities', () => {
             expect(mockD1.prepare).toHaveBeenCalledWith(
                 'DELETE FROM TeamSubscriptions WHERE subscriberId = ? AND teamId = ?',
             );
-            expect(mockD1.bind).toHaveBeenCalledWith(1, 10);
-            expect(mockD1.run).toHaveBeenCalled();
+            expect(mockStatement.bind).toHaveBeenCalledWith(1, 10);
+            expect(mockStatement.run).toHaveBeenCalled();
         });
     });
 
@@ -153,7 +157,7 @@ describe('D1 Database Utilities', () => {
                 { id: 1, telegramId: 12345, createdAt: new Date().toISOString() },
                 { id: 2, telegramId: 54321, createdAt: new Date().toISOString() },
             ];
-            (mockD1.all as jest.Mock).mockResolvedValue({ results: mockSubscribers });
+            mockStatement.all.mockResolvedValue({ results: mockSubscribers });
             const db = getDb(mockEnv);
 
             const result = await db.getSubscribersByTeamId(10);
@@ -161,7 +165,7 @@ describe('D1 Database Utilities', () => {
             expect(mockD1.prepare).toHaveBeenCalledWith(
                 'SELECT S.* FROM Subscribers S JOIN TeamSubscriptions TS ON S.id = TS.subscriberId WHERE TS.teamId = ?',
             );
-            expect(mockD1.bind).toHaveBeenCalledWith(10);
+            expect(mockStatement.bind).toHaveBeenCalledWith(10);
             expect(result).toEqual(mockSubscribers);
         });
     });

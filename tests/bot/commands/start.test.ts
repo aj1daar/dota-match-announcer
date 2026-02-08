@@ -1,20 +1,22 @@
 import { startCommand } from '../../../src/bot/commands/start';
 import { getDb } from '../../../src/db/utils';
-import { Env } from '../../../src/index';
-import { Context } from 'telegraf';
+import { Env } from '../../../src';
+import { CustomContext } from '../../../src/bot/context';
 
 jest.mock('../../../src/db/utils');
 
 describe('startCommand', () => {
-    let mockCtx: Context;
+    let mockCtx: CustomContext;
     let mockEnv: Env;
     let mockDb: ReturnType<typeof getDb>;
 
     beforeEach(() => {
+        mockEnv = {} as Env;
         mockCtx = {
             from: { id: 12345, is_bot: false, first_name: 'Test' },
             reply: jest.fn(),
-        } as unknown as Context;
+            env: mockEnv,
+        } as unknown as CustomContext;
 
         mockDb = {
             getSubscriberByTelegramId: jest.fn(),
@@ -22,8 +24,6 @@ describe('startCommand', () => {
         } as unknown as ReturnType<typeof getDb>;
 
         (getDb as jest.Mock).mockReturnValue(mockDb);
-
-        mockEnv = {} as Env;
     });
 
     afterEach(() => {
@@ -40,7 +40,7 @@ describe('startCommand', () => {
             subscriber,
         );
 
-        await startCommand(mockCtx, mockEnv);
+        await startCommand(mockCtx);
 
         expect(mockDb.getSubscriberByTelegramId).toHaveBeenCalledWith(12345);
         expect(mockDb.createSubscriber).not.toHaveBeenCalled();
@@ -58,7 +58,7 @@ describe('startCommand', () => {
         };
         (mockDb.createSubscriber as jest.Mock).mockResolvedValue(newSubscriber);
 
-        await startCommand(mockCtx, mockEnv);
+        await startCommand(mockCtx);
 
         expect(mockDb.getSubscriberByTelegramId).toHaveBeenCalledWith(12345);
         expect(mockDb.createSubscriber).toHaveBeenCalledWith(12345);
@@ -68,11 +68,14 @@ describe('startCommand', () => {
     });
 
     it('should handle cases where telegramId is not available', async () => {
-        mockCtx.from = undefined;
+        const mockCtxWithoutFrom: CustomContext = {
+            reply: jest.fn(),
+            env: mockEnv,
+        } as unknown as CustomContext;
 
-        await startCommand(mockCtx, mockEnv);
+        await startCommand(mockCtxWithoutFrom);
 
-        expect(mockCtx.reply).toHaveBeenCalledWith(
+        expect(mockCtxWithoutFrom.reply).toHaveBeenCalledWith(
             'Could not identify your Telegram ID.',
         );
         expect(mockDb.getSubscriberByTelegramId).not.toHaveBeenCalled();
