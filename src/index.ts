@@ -1,4 +1,4 @@
-import { Router } from 'itty-router';
+import { AutoRouter } from 'itty-router';
 import { handleUpdate } from './bot';
 import { handleCron } from './cron';
 
@@ -9,20 +9,16 @@ export interface Env {
   NOTIFICATIONS_KV: KVNamespace;
 }
 
-const router = Router();
+const router = AutoRouter();
 
+// Health check endpoint
+router.get('/', () => 'Dota Match Announcer Bot is running!');
+
+// Telegram webhook endpoint
 router.post('/telegram-webhook', handleUpdate);
 
-router.all('*', () => new Response('404, not found!', { status: 404 }));
-
 export default {
-    async fetch(
-        request: Request,
-        env: Env,
-        ctx: ExecutionContext,
-    ): Promise<Response> {
-        return router.handle(request, env, ctx);
-    },
+    ...router,
     async scheduled(
         event: ScheduledEvent,
         env: Env,
