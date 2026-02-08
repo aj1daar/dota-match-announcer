@@ -13,11 +13,11 @@ crons = ["*/15 * * * *"]
 [[d1_databases]]
 binding = "D1"
 database_name = "dota-match-announcer"
-database_id = ""
+database_id = "14cfc1ee-16eb-496a-9393-5fe9ce421efa"
 migrations_dir = "src/db"
 
 [[kv_namespaces]]
 binding = "NOTIFICATIONS_KV"
-id = "YOUR_KV_ID" # Placeholder
-preview_id = "YOUR_KV_PREVIEW_ID" # Placeholder
+id = "583877d8a9a443b3beff55e5ca95b20f" # Placeholder
+preview_id = "583877d8a9a443b3beff55e5ca95b20f" # Placeholder
 
