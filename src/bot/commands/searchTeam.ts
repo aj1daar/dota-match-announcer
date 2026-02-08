@@ -17,6 +17,7 @@ export const searchTeamCommand = async (ctx: CustomContext) => {
             );
         }
 
+        console.log(`[searchTeam] User ${ctx.from?.id} searching for team: "${teamName}"`);
         const pandaScoreClient = new PandaScoreClient(ctx.env);
         const teams = await pandaScoreClient.searchTeams(teamName);
 

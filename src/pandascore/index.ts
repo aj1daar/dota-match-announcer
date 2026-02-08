@@ -64,6 +64,7 @@ export class PandaScoreClient {
         }
 
         // Make request with Authorization header
+        console.log(`[PandaScore] Requesting: ${url.toString()}`);
         const response = await fetch(url.toString(), {
             headers: {
                 'Authorization': `Bearer ${this.token}`,
@@ -86,7 +87,51 @@ export class PandaScoreClient {
     }
 
     async searchTeams(name: string): Promise<Team[]> {
-        return this.request<Team[]>('/teams', { search: name });
+        console.log(`[PandaScore] Searching for teams with query: "${name}"`);
+
+        /*
+         * Fetch all teams with pagination
+         * PandaScore's search parameter doesn't work reliably, so we implement client-side filtering
+         */
+        const allTeams: Team[] = [];
+        const pageSize = 50;
+        let page = 1;
+        let hasMore = true;
+
+        while (hasMore && page <= 10) {
+            // Limit to 10 pages to avoid excessive API calls
+            console.log(`[PandaScore] Fetching teams page ${page}...`);
+
+            const teams = await this.request<Team[]>('/teams', {
+                'page[size]': pageSize,
+                'page[number]': page,
+                sort: '-modified_at',
+            });
+
+            if (teams.length === 0) {
+                hasMore = false;
+            } else {
+                allTeams.push(...teams);
+                page++;
+            }
+        }
+
+        console.log(`[PandaScore] Fetched ${allTeams.length} total teams`);
+
+        // Client-side filtering
+        const lowerName = name.toLowerCase();
+        const matchingTeams = allTeams.filter(team => {
+            const nameMatch = team.name.toLowerCase().includes(lowerName);
+            const acronymMatch = team.acronym && team.acronym.toLowerCase().includes(lowerName);
+            return nameMatch || acronymMatch;
+        });
+
+        console.log(
+            `[PandaScore] Found ${matchingTeams.length} teams matching "${name}":`,
+            matchingTeams.map(t => t.name).join(', '),
+        );
+
+        return matchingTeams;
     }
 
     async getUpcomingMatches(teamIds: number[]): Promise<Match[]> {

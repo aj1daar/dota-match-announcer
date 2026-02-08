@@ -226,9 +226,8 @@ export default {
     ...router,
     async scheduled(
         event: ScheduledEvent,
-        env: Env,
-        ctx: ExecutionContext,
+        env: Env
     ): Promise<void> {
-        await handleCron(env, ctx);
+        await handleCron(env);
     },
 };

@@ -59,22 +59,37 @@ function getBot(token: string, env?: Env): Telegraf<CustomContext> {
 
 export const handleUpdate = async (request: Request, env: Env): Promise<Response> => {
     try {
-        const bot = getBot(env.TELEGRAM_BOT_TOKEN, env);
-
         // Parse the update
         const update = (await request.json()) as Update;
         console.log('Received Telegram update:', JSON.stringify(update, null, 2));
 
         /*
-         * Manually process the update since we can't use Express middleware
-         * Create a minimal context-like object that satisfies the response interface
+         * Create a mock response object that implements the required Node.js ServerResponse interface
+         * This is needed because Telegraf expects to call methods like setHeader, write, and end
          */
-        await bot.handleUpdate(update, {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const mockResponse: any = {
             writableEnded: false,
-            end: () => {
-                // No-op: response handling is handled by Telegram's webhook mechanism
+            statusCode: 200,
+            statusMessage: 'OK',
+            headers: {} as Record<string, string>,
+            setHeader: (name: string, value: string) => {
+                mockResponse.headers[name] = value;
+                return mockResponse;
             },
-        } as any);
+            getHeader: (_name: string) => mockResponse.headers[_name],
+            removeHeader: (_name: string) => {
+                delete mockResponse.headers[_name];
+                return mockResponse;
+            },
+            write: (_data: string | Buffer) => true,
+            end: (_data?: string | Buffer) => {
+                mockResponse.writableEnded = true;
+            },
+        };
+
+        // Process the update with the bot
+        await getBot(env.TELEGRAM_BOT_TOKEN, env).handleUpdate(update, mockResponse);
 
         return new Response('OK', { status: 200 });
     } catch (error) {
