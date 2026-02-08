@@ -1,4 +1,5 @@
 HELP.md
+GEMINI.md
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
@@ -9,9 +10,11 @@ target/
 .env.local
 .env.*.local
 *.env
+.dev.vars
 *.pem
 *.key
 secrets/
+.wrangler
 
 ### STS ###
 .apt_generated
