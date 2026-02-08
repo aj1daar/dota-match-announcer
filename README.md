@@ -47,13 +47,13 @@ This is a refactored version of the Dota 2 Match Announcer, implemented as a Clo
     binding = "D1"
     database_name = "dota-match-announcer"
     database_id = "<YOUR_D1_DATABASE_ID>" # Paste the ID here
-    migrations_dir = "src/db"
+    migrations_dir = "src/db/migrations"
     ```
 
     Then, apply the schema:
     ```bash
     wrangler d1 migrations apply dota-match-announcer --local
-    wrangler d1 migrations apply dota-match-announcer
+    wrangler d1 migrations apply dota-match-announcer --remote
     ```
 
 5.  **Create KV Namespace**
@@ -94,11 +94,36 @@ This is a refactored version of the Dota 2 Match Announcer, implemented as a Clo
 
 ## Deployment
 
-To deploy your worker to Cloudflare:
+### Manual Deployment
+
+To deploy your worker to Cloudflare manually:
 
 ```bash
 npm run deploy
 ```
+
+### Automated Deployment (CI/CD)
+
+The project includes a GitHub Actions workflow (`.github/workflows/ci.yml`) that automatically:
+
+1. **Runs linting** - Validates code quality with ESLint
+2. **Runs tests** - Executes the test suite
+3. **Applies database migrations** - Automatically applies any new D1 migrations to production
+4. **Deploys to Cloudflare Workers** - Deploys the latest code to production
+
+**Deployment triggers:**
+- Automatically deploys on push to the `main` branch
+- Only deploys if all tests pass
+
+**Required GitHub Secrets:**
+- `CLOUDFLARE_API_TOKEN` - Your Cloudflare API token (for deployment and migrations)
+- `TELEGRAM_BOT_TOKEN` - Your Telegram bot token
+- `PANDASCORE_TOKEN` - Your PandaScore API token
+
+To set up these secrets:
+1. Go to your GitHub repository
+2. Navigate to Settings → Secrets and variables → Actions
+3. Add each secret with the appropriate value
 
 ## Project Structure (New)
 
