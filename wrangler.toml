@@ -20,7 +20,7 @@ crons = ["*/1 * * * *", "*/15 * * * *"]
 binding = "D1"
 database_name = "dota-match-announcer"
 database_id = "14cfc1ee-16eb-496a-9393-5fe9ce421efa"
-migrations_dir = "src/db"
+migrations_dir = "src/db/migrations"
 
 [[kv_namespaces]]
 binding = "NOTIFICATIONS_KV"
