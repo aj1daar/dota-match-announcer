@@ -1,0 +1,7 @@
+# Cloudflare Workers local development environment variables
+# Copy this file to .dev.vars and fill in your actual values
+# .dev.vars is gitignored and should never be committed
+
+TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+PANDASCORE_TOKEN=your_pandascore_api_token_here
+
