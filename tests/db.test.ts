@@ -1,5 +1,5 @@
 import { getDb, Subscriber, TeamSubscription } from '../src/db/utils';
-import { Env } from '../src/index';
+import { Env } from '../src';
 
 describe('D1 Database Utilities', () => {
     let mockEnv: Env;
