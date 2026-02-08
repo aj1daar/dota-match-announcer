@@ -2,8 +2,32 @@ import { Env } from '../index';
 import { PandaScoreClient, Match } from '../pandascore';
 import { getDb } from '../db/utils';
 import { Telegraf } from 'telegraf';
-export async function handleCron(env: Env, _ctx: ExecutionContext) {
+export async function handleCron(env: Env, ctx: ExecutionContext) {
     console.log('Cron job started...');
+
+    // Always poll for Telegram updates (runs every minute)
+    try {
+        await pollTelegramUpdates(env);
+    } catch (error) {
+        console.error('Error polling Telegram updates:', error);
+    }
+
+    // Only run match notifications every 15 minutes
+    const lastRunKey = 'last_match_notifications_run';
+    const lastRun = await env.NOTIFICATIONS_KV.get(lastRunKey);
+    const now = Date.now();
+    const fifteenMinutesMs = 15 * 60 * 1000;
+
+    if (lastRun) {
+        const lastRunTime = parseInt(lastRun);
+        if (now - lastRunTime < fifteenMinutesMs) {
+            console.log('Skipping match notifications (ran recently)');
+            return;
+        }
+    }
+
+    console.log('Running match notifications...');
+    await env.NOTIFICATIONS_KV.put(lastRunKey, String(now));
 
     const db = getDb(env);
     const pandaScoreClient = new PandaScoreClient(env);
@@ -104,4 +128,15 @@ function formatMatchNotification(match: Match): string {
 🗓️ ${startTime}
 🏆 ${league} - ${serie}
 `;
+}
+
+async function pollTelegramUpdates(env: Env): Promise<void> {
+    try {
+        const workerUrl = 'https://dota-match-announcer.atainogoibaev.workers.dev';
+        const response = await fetch(`${workerUrl}/poll-updates`);
+        const result = await response.json();
+        console.log('Telegram polling result:', result);
+    } catch (error) {
+        console.error('Error calling poll-updates endpoint:', error);
+    }
 }

@@ -26,9 +26,11 @@ function getBot(token: string, env?: Env): Telegraf<CustomContext> {
         // Register error handler
         bot.catch((err, ctx) => {
             console.error('Telegraf error:', err);
-            return ctx.reply('An error occurred. Please try again later.').catch(() => {
-                console.error('Failed to send error message to user');
-            });
+            try {
+                return ctx.reply('An error occurred. Please try again later.');
+            } catch (e) {
+                console.error('Failed to send error message:', e);
+            }
         });
 
         // Register commands
@@ -59,14 +61,31 @@ export const handleUpdate = async (request: Request, env: Env): Promise<Response
 
         // Parse the update
         const update = (await request.json()) as Update;
-        console.log('Received update:', JSON.stringify(update, null, 2));
+        console.log('Received Telegram update:', JSON.stringify(update, null, 2));
 
-        // Handle the update
-        await bot.handleUpdate(update);
+        /*
+         * Use webhookCallback to handle the update properly
+         * This is the correct way to handle Telegram updates in serverless environments
+         */
+        const response = new Response();
+        const webhookCallback = bot.webhookCallback('/telegram-webhook');
+
+        /*
+         * We need to manually process the update since we can't use Express middleware
+         * Create a minimal context-like object for the middleware
+         */
+        await bot.handleUpdate(update, {
+            writableEnded: false,
+            end: () => {},
+        } as any);
 
         return new Response('OK', { status: 200 });
     } catch (error) {
         console.error('Error handling Telegram update:', error);
-        return new Response('Error handling Telegram update', { status: 500 });
+        console.error('Stack:', (error as Error).stack);
+        return new Response(JSON.stringify({ error: String(error) }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+        });
     }
 };
