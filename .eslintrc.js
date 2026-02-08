@@ -40,5 +40,6 @@ module.exports = {
         'spaced-comment': ['error', 'always'], // Enforce consistent spacing after comment markers
         'capitalized-comments': ['error', 'always'], // Enforce or disallow capitalization of the first letter of a comment
         'no-warning-comments': ['error', { 'terms': ['todo', 'fixme', 'hack'], 'location': 'anywhere' }], // Disallow specific warning comments
+        'no-var': 'off',
     },
 };
