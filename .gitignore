@@ -14,6 +14,7 @@ target/
 *.pem
 *.key
 secrets/
+.wrangler
 
 ### STS ###
 .apt_generated
