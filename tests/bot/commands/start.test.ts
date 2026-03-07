@@ -47,9 +47,9 @@ describe('startCommand', () => {
         expect(mockDb.createSubscriber).not.toHaveBeenCalled();
         expect(mockCtx.reply).toHaveBeenCalledWith(
             'Welcome back to the Dota Match Announcer Bot! 🎮\n\n' +
-            'Your current timezone: *UTC*\n' +
-            'Change it with /timezone if needed.',
-            { parse_mode: 'Markdown' }
+            'Your current timezone: *UTC*\n\n' +
+            'Use the menu below to navigate the bot, or type commands manually.',
+            expect.objectContaining({ parse_mode: 'Markdown' })
         );
     });
 
@@ -70,8 +70,8 @@ describe('startCommand', () => {
         expect(mockCtx.reply).toHaveBeenCalledWith(
             'Welcome to the Dota Match Announcer Bot! 🎮\n\n' +
             'You have been registered with timezone: *UTC*\n\n' +
-            'You can change your timezone anytime with /timezone command.',
-            { parse_mode: 'Markdown' }
+            'Use the menu below to navigate the bot, or type commands manually.',
+            expect.objectContaining({ parse_mode: 'Markdown' })
         );
     });
 
