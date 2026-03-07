@@ -33,9 +33,11 @@ describe('searchTeamCommand', () => {
     it('should prompt for a team name if none is provided', async () => {
         (mockCtx.message as Message.TextMessage).text = '/searchteam';
         await searchTeamCommand(mockCtx as CustomContext);
-        expect(mockCtx.reply).toHaveBeenCalledWith(
-            'Please provide a team name to search for. Example: `/searchteam OG`',
-        );
+
+        const [message, options] = (mockCtx.reply as jest.Mock).mock.calls[0];
+        expect(message).toContain('Team Search');
+        expect(message).toContain('Please enter the team name');
+        expect(options).toEqual(expect.objectContaining({ parse_mode: 'Markdown' }));
     });
 
     it('should return a list of teams found', async () => {
@@ -47,16 +49,17 @@ describe('searchTeamCommand', () => {
         await searchTeamCommand(mockCtx as CustomContext);
 
         expect(mockPandaScoreClient.searchTeams).toHaveBeenCalledWith('OG');
-        expect(mockCtx.reply).toHaveBeenCalledWith(
-            'Select a team to subscribe to:',
-            {
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: 'OG', callback_data: 'subscribe_team:1:OG' }],
-                    ],
-                },
+
+        const [message, options] = (mockCtx.reply as jest.Mock).mock.calls[0];
+        expect(message).toContain('Found 1 team(s) matching "OG"');
+        expect(message).toContain('Select a team to subscribe to:');
+        expect(options).toEqual({
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: 'OG', callback_data: 'subscribe_team:1:OG' }],
+                ],
             },
-        );
+        });
     });
 
     it('should reply when no teams are found', async () => {
@@ -64,6 +67,8 @@ describe('searchTeamCommand', () => {
 
         await searchTeamCommand(mockCtx as CustomContext);
 
-        expect(mockCtx.reply).toHaveBeenCalledWith('No teams found for "OG".');
+        const [message] = (mockCtx.reply as jest.Mock).mock.calls[0];
+        expect(message).toContain('No teams found for "OG"');
+        expect(message).toContain('Try searching with a different name');
     });
 });
