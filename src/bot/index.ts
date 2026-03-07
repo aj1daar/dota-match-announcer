@@ -46,30 +46,36 @@ function getBot(token: string, env?: Env, request?: Request): Telegraf<CustomCon
         bot.command('myteams', myTeamsCommand);
         bot.command('timezone', timezoneCommand);
 
-        bot.hears('🔍 Search Teams', searchTeamCommand);
-        bot.hears('📋 My Teams', myTeamsCommand);
-        bot.hears('🕐 Timezone', timezoneCommand);
-        bot.hears('❓ Help', helpCommand);
+        bot.hears('🔍 Search Teams', (ctx: CustomContext) => {
+            ctx.state.buttonPressed = true;
+            return searchTeamCommand(ctx);
+        });
+        bot.hears('📋 My Teams', (ctx: CustomContext) => {
+            ctx.state.buttonPressed = true;
+            return myTeamsCommand(ctx);
+        });
+        bot.hears('🕐 Timezone', (ctx: CustomContext) => {
+            ctx.state.buttonPressed = true;
+            return timezoneCommand(ctx);
+        });
+        bot.hears('❓ Help', (ctx: CustomContext) => {
+            ctx.state.buttonPressed = true;
+            return helpCommand(ctx);
+        });
 
-        /*
-         * Handle any text message that's not a command or button
-         * Treat it as a team search query
-         */
         bot.on('text', async (ctx: CustomContext) => {
+
+            if (ctx.state.buttonPressed) {
+                ctx.state.buttonPressed = false;
+                return;
+            }
+
             const text = ctx.message.text;
 
-            // Skip if it's a command (starts with /)
             if (text.startsWith('/')) {
                 return;
             }
 
-            // Skip if it's one of our button texts
-            const buttonTexts = ['🔍 Search Teams', '📋 My Teams', '🕐 Timezone', '❓ Help'];
-            if (buttonTexts.includes(text)) {
-                return;
-            }
-
-            // Treat any other text as a team search query
             console.log(`[text handler] User ${ctx.from?.id} searching for: "${text}"`);
             return performTeamSearch(ctx, text);
         });
