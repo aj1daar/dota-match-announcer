@@ -1,6 +1,7 @@
 import { CustomContext } from '../context';
 import { getDb } from '../../db/utils';
 import { detectTimezoneFromRequest } from '../../utils/timezone';
+import { Markup } from 'telegraf';
 
 export const startCommand = async (ctx: CustomContext) => {
     try {
@@ -18,6 +19,11 @@ export const startCommand = async (ctx: CustomContext) => {
         const db = getDb(ctx.env);
         const subscriber = await db.getSubscriberByTelegramId(telegramId);
 
+        const keyboard = Markup.keyboard([
+            ['🔍 Search Teams', '📋 My Teams'],
+            ['🕐 Timezone', '❓ Help'],
+        ]).resize().persistent();
+
         if (!subscriber) {
             const detectedTimezone = ctx.request
                 ? detectTimezoneFromRequest(ctx.request)
@@ -28,15 +34,15 @@ export const startCommand = async (ctx: CustomContext) => {
             return ctx.reply(
                 'Welcome to the Dota Match Announcer Bot! 🎮\n\n' +
                 `You have been registered with timezone: *${detectedTimezone}*\n\n` +
-                'You can change your timezone anytime with /timezone command.',
-                { parse_mode: 'Markdown' }
+                'Use the menu below to navigate the bot, or type commands manually.',
+                { parse_mode: 'Markdown', ...keyboard }
             );
         } else {
             return ctx.reply(
                 'Welcome back to the Dota Match Announcer Bot! 🎮\n\n' +
-                `Your current timezone: *${subscriber.timezone}*\n` +
-                'Change it with /timezone if needed.',
-                { parse_mode: 'Markdown' }
+                `Your current timezone: *${subscriber.timezone}*\n\n` +
+                'Use the menu below to navigate the bot, or type commands manually.',
+                { parse_mode: 'Markdown', ...keyboard }
             );
         }
     } catch (error) {

@@ -45,6 +45,11 @@ function getBot(token: string, env?: Env, request?: Request): Telegraf<CustomCon
         bot.command('myteams', myTeamsCommand);
         bot.command('timezone', timezoneCommand);
 
+        bot.hears('🔍 Search Teams', searchTeamCommand);
+        bot.hears('📋 My Teams', myTeamsCommand);
+        bot.hears('🕐 Timezone', timezoneCommand);
+        bot.hears('❓ Help', helpCommand);
+
         bot.on('callback_query', (ctx: CustomContext) => {
             if (!ctx.callbackQuery || !isDataCallbackQuery(ctx.callbackQuery)) {
                 return ctx.answerCbQuery('Something went wrong: No callback data.');
