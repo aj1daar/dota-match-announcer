@@ -46,33 +46,21 @@ function getBot(token: string, env?: Env, request?: Request): Telegraf<CustomCon
         bot.command('myteams', myTeamsCommand);
         bot.command('timezone', timezoneCommand);
 
-        bot.hears('🔍 Search Teams', (ctx: CustomContext) => {
-            ctx.state.buttonPressed = true;
-            return searchTeamCommand(ctx);
-        });
-        bot.hears('📋 My Teams', (ctx: CustomContext) => {
-            ctx.state.buttonPressed = true;
-            return myTeamsCommand(ctx);
-        });
-        bot.hears('🕐 Timezone', (ctx: CustomContext) => {
-            ctx.state.buttonPressed = true;
-            return timezoneCommand(ctx);
-        });
-        bot.hears('❓ Help', (ctx: CustomContext) => {
-            ctx.state.buttonPressed = true;
-            return helpCommand(ctx);
-        });
+        bot.hears('🔍 Search Teams', searchTeamCommand);
+        bot.hears('📋 My Teams', myTeamsCommand);
+        bot.hears('🕐 Timezone', timezoneCommand);
+        bot.hears('❓ Help', helpCommand);
 
         bot.on('text', async (ctx: CustomContext) => {
-
-            if (ctx.state.buttonPressed) {
-                ctx.state.buttonPressed = false;
+            const text = (ctx.message as any)?.text;
+            if (!text) {
                 return;
             }
-
-            const text = ctx.message.text;
-
             if (text.startsWith('/')) {
+                return;
+            }
+            const buttonTexts = ['🔍 Search Teams', '📋 My Teams', '🕐 Timezone', '❓ Help'];
+            if (buttonTexts.includes(text)) {
                 return;
             }
 

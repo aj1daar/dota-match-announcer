@@ -13,6 +13,7 @@ export interface Match {
   end_at: string | null;
   status: 'not_started' | 'running' | 'finished' | 'canceled';
   name: string;
+  number_of_games?: number;
   league: {
     name: string;
     image_url: string | null;

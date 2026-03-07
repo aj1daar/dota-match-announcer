@@ -116,11 +116,15 @@ function formatMatchNotification(match: Match, userTimezone = 'UTC'): string {
     const formattedTime = formatMatchTime(match.begin_at, userTimezone);
     const tzAbbr = getTimezoneAbbreviation(matchDate, userTimezone);
 
+    const boInfo = match.number_of_games
+        ? `\n🎮 Best of ${match.number_of_games} (BO${match.number_of_games})`
+        : '';
+
     return `
 <b>Upcoming Dota 2 Match!</b>
 
 <b>${team1} vs ${team2}</b>
-🗓️ ${formattedTime} ${tzAbbr}
+🗓️ ${formattedTime} ${tzAbbr}${boInfo}
 🏆 ${league} - ${serie}
 `;
 }
