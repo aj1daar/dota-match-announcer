@@ -9,7 +9,14 @@ export const searchTeamCommand = async (ctx: CustomContext) => {
             return ctx.reply('Please provide a team name to search for. Example: `/searchteam OG`');
         }
 
-        const teamName = (ctx.message as Message.TextMessage).text.split(' ').slice(1).join(' ');
+        const fullText = (ctx.message as Message.TextMessage).text;
+
+        const isButtonClick = fullText.startsWith('🔍');
+
+        let teamName = '';
+        if (!isButtonClick) {
+            teamName = fullText.split(' ').slice(1).join(' ');
+        }
 
         if (!teamName) {
             const keyboard = Markup.keyboard([
