@@ -3,6 +3,7 @@ import { Env } from '../index';
 export interface Subscriber {
   id: number;
   telegramId: number;
+  timezone: string;
   createdAt: string;
 }
 
@@ -16,11 +17,11 @@ export interface TeamSubscription {
 
 export const getDb = (env: Env) => {
     return {
-        async createSubscriber(telegramId: number): Promise<Subscriber> {
+        async createSubscriber(telegramId: number, timezone = 'UTC'): Promise<Subscriber> {
             const { results } = await env.D1.prepare(
-                'INSERT INTO Subscribers (telegramId) VALUES (?) RETURNING *',
+                'INSERT INTO Subscribers (telegramId, timezone) VALUES (?, ?) RETURNING *',
             )
-                .bind(telegramId)
+                .bind(telegramId, timezone)
                 .all<Subscriber>();
             return results[0];
         },
@@ -34,6 +35,14 @@ export const getDb = (env: Env) => {
                 .bind(telegramId)
                 .all<Subscriber>();
             return results.length ? results[0] : null;
+        },
+
+        async updateTimezone(telegramId: number, timezone: string): Promise<void> {
+            await env.D1.prepare(
+                'UPDATE Subscribers SET timezone = ? WHERE telegramId = ?',
+            )
+                .bind(timezone, telegramId)
+                .run();
         },
 
         async subscribeTeam(
