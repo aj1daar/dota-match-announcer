@@ -2,10 +2,10 @@ import { Env } from '../index';
 import { PandaScoreClient, Match } from '../pandascore';
 import { getDb } from '../db/utils';
 import { Telegraf } from 'telegraf';
+import { formatMatchTime, getTimezoneAbbreviation } from '../utils/timezone';
 export async function handleCron(env: Env) {
     console.log('Cron job started...');
 
-    // Only run match notifications every 15 minutes
     const lastRunKey = 'last_match_notifications_run';
     const lastRun = await env.NOTIFICATIONS_KV.get(lastRunKey);
     const now = Date.now();
@@ -67,7 +67,7 @@ export async function handleCron(env: Env) {
         if (timeUntilMatch > 0 && timeUntilMatch <= 1800000) {
             console.log(`Sending notification for match ${match.id}`);
 
-            const message = formatMatchNotification(match);
+            formatMatchNotification(match);
 
             const subscribersToNotify = new Set<number>();
             for (const opponent of match.opponents) {
@@ -84,6 +84,11 @@ export async function handleCron(env: Env) {
 
             for (const telegramId of Array.from(subscribersToNotify)) {
                 try {
+                    const subscriber = allSubscribers.find(s => s.telegramId === telegramId);
+                    const userTimezone = subscriber?.timezone || 'UTC';
+
+                    const message = formatMatchNotification(match, userTimezone);
+
                     await bot.telegram.sendMessage(telegramId, message, {
                         parse_mode: 'HTML',
                     });
@@ -101,24 +106,21 @@ export async function handleCron(env: Env) {
     console.log('Cron job finished.');
 }
 
-function formatMatchNotification(match: Match): string {
+function formatMatchNotification(match: Match, userTimezone = 'UTC'): string {
     const team1 = match.opponents[0]?.opponent.name || 'TBD';
     const team2 = match.opponents[1]?.opponent.name || 'TBD';
     const league = match.league.name;
     const serie = match.serie.full_name;
-    const startTime = new Date(match.begin_at).toLocaleString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-    });
+
+    const matchDate = new Date(match.begin_at);
+    const formattedTime = formatMatchTime(match.begin_at, userTimezone);
+    const tzAbbr = getTimezoneAbbreviation(matchDate, userTimezone);
 
     return `
 ⚽️ <b>Upcoming Dota 2 Match!</b> ⚽️
 
 <b>${team1} vs ${team2}</b>
-🗓️ ${startTime}
+🗓️ ${formattedTime} ${tzAbbr}
 🏆 ${league} - ${serie}
 `;
 }
