@@ -45,8 +45,7 @@ export const timezoneRegionCallback = async (ctx: CustomContext) => {
         await ctx.answerCbQuery();
     } catch (error) {
         console.error('Error in timezoneRegionCallback:', error);
-        await ctx.answerCbQuery('An error occurred').catch(() => {
-        });
+        await ctx.answerCbQuery('An error occurred').catch(() => undefined);
     }
 };
 
@@ -85,8 +84,7 @@ export const timezoneSetCallback = async (ctx: CustomContext) => {
         await ctx.answerCbQuery('Timezone updated!');
     } catch (error) {
         console.error('Error in timezoneSetCallback:', error);
-        await ctx.answerCbQuery('An error occurred').catch(() => {
-        });
+        await ctx.answerCbQuery('An error occurred').catch(() => undefined);
     }
 };
 
@@ -133,7 +131,6 @@ export const timezoneBackCallback = async (ctx: CustomContext) => {
         await ctx.answerCbQuery();
     } catch (error) {
         console.error('Error in timezoneBackCallback:', error);
-        await ctx.answerCbQuery('An error occurred').catch(() => {
-        });
+        await ctx.answerCbQuery('An error occurred').catch(() => undefined);
     }
 };
