@@ -10,6 +10,7 @@ import { subscribeTeamCallback } from './callbacks/subscribeTeam';
 import { unsubscribeTeamCallback } from './callbacks/unsubscribeTeam';
 import { timezoneRegionCallback, timezoneSetCallback, timezoneBackCallback } from './callbacks/timezone';
 import { isDataCallbackQuery } from './utils';
+import { performTeamSearch } from './utils/performTeamSearch';
 import { Update } from 'telegraf/types';
 
 let bot: Telegraf<CustomContext> | null = null;
@@ -49,6 +50,29 @@ function getBot(token: string, env?: Env, request?: Request): Telegraf<CustomCon
         bot.hears('📋 My Teams', myTeamsCommand);
         bot.hears('🕐 Timezone', timezoneCommand);
         bot.hears('❓ Help', helpCommand);
+
+        /*
+         * Handle any text message that's not a command or button
+         * Treat it as a team search query
+         */
+        bot.on('text', async (ctx: CustomContext) => {
+            const text = ctx.message.text;
+
+            // Skip if it's a command (starts with /)
+            if (text.startsWith('/')) {
+                return;
+            }
+
+            // Skip if it's one of our button texts
+            const buttonTexts = ['🔍 Search Teams', '📋 My Teams', '🕐 Timezone', '❓ Help'];
+            if (buttonTexts.includes(text)) {
+                return;
+            }
+
+            // Treat any other text as a team search query
+            console.log(`[text handler] User ${ctx.from?.id} searching for: "${text}"`);
+            return performTeamSearch(ctx, text);
+        });
 
         bot.on('callback_query', (ctx: CustomContext) => {
             if (!ctx.callbackQuery || !isDataCallbackQuery(ctx.callbackQuery)) {

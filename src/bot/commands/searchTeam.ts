@@ -1,7 +1,7 @@
 import { CustomContext } from '../context';
-import { PandaScoreClient, Team } from '../../pandascore';
-import { InlineKeyboardButton } from 'telegraf/types';
 import { Message } from 'telegraf/types';
+import { Markup } from 'telegraf';
+import { performTeamSearch } from '../utils/performTeamSearch';
 
 export const searchTeamCommand = async (ctx: CustomContext) => {
     try {
@@ -12,31 +12,21 @@ export const searchTeamCommand = async (ctx: CustomContext) => {
         const teamName = (ctx.message as Message.TextMessage).text.split(' ').slice(1).join(' ');
 
         if (!teamName) {
+            const keyboard = Markup.keyboard([
+                ['🔍 Search Teams', '📋 My Teams'],
+                ['🕐 Timezone', '❓ Help'],
+            ]).resize().persistent();
+
             return ctx.reply(
-                'Please provide a team name to search for. Example: `/searchteam OG`',
+                '🔍 *Team Search*\n\n' +
+                'Please enter the team name you want to search for.\n\n' +
+                'Example: Type `OG` or `Team Liquid`\n\n' +
+                'I\'ll search for matching teams and show you the results!',
+                { parse_mode: 'Markdown', ...keyboard }
             );
         }
 
-        console.log(`[searchTeam] User ${ctx.from?.id} searching for team: "${teamName}"`);
-        const pandaScoreClient = new PandaScoreClient(ctx.env);
-        const teams = await pandaScoreClient.searchTeams(teamName);
-
-        if (teams.length === 0) {
-            return ctx.reply(`No teams found for "${teamName}".`);
-        }
-
-        const keyboardButtons: InlineKeyboardButton[][] = teams.map((team: Team) => [
-            {
-                text: team.name,
-                callback_data: `subscribe_team:${team.id}:${team.name}`,
-            },
-        ]);
-
-        return ctx.reply('Select a team to subscribe to:', {
-            reply_markup: {
-                inline_keyboard: keyboardButtons,
-            },
-        });
+        return performTeamSearch(ctx, teamName);
     } catch (error) {
         console.error('Error in searchTeamCommand:', error);
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
