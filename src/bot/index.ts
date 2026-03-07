@@ -2,6 +2,7 @@ import { Telegraf } from 'telegraf';
 import { Env } from '../index';
 import { CustomContext } from './context';
 import { startCommand } from './commands/start';
+import { helpCommand } from './commands/help';
 import { searchTeamCommand } from './commands/searchTeam';
 import { myTeamsCommand } from './commands/myTeams';
 import { timezoneCommand } from './commands/timezone';
@@ -27,7 +28,6 @@ function getBot(token: string, env?: Env, request?: Request): Telegraf<CustomCon
             });
         }
 
-        // Register error handler
         bot.catch((err, ctx) => {
             console.error('Telegraf error:', err);
             try {
@@ -39,13 +39,12 @@ function getBot(token: string, env?: Env, request?: Request): Telegraf<CustomCon
             }
         });
 
-        // Register commands
         bot.start(startCommand);
+        bot.command('help', helpCommand);
         bot.command('searchteam', searchTeamCommand);
         bot.command('myteams', myTeamsCommand);
         bot.command('timezone', timezoneCommand);
 
-        // Register callback query handler
         bot.on('callback_query', (ctx: CustomContext) => {
             if (!ctx.callbackQuery || !isDataCallbackQuery(ctx.callbackQuery)) {
                 return ctx.answerCbQuery('Something went wrong: No callback data.');
@@ -70,7 +69,6 @@ function getBot(token: string, env?: Env, request?: Request): Telegraf<CustomCon
 
 export const handleUpdate = async (request: Request, env: Env): Promise<Response> => {
     try {
-        // Parse the update
         const update = (await request.json()) as Update;
         console.log('Received Telegram update:', JSON.stringify(update, null, 2));
 
@@ -95,7 +93,6 @@ export const handleUpdate = async (request: Request, env: Env): Promise<Response
             },
         };
 
-        // Process the update with the bot
         await getBot(env.TELEGRAM_BOT_TOKEN, env, request).handleUpdate(update, mockResponse);
 
         return new Response('OK', { status: 200 });
