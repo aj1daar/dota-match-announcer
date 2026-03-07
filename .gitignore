@@ -1,5 +1,5 @@
 HELP.md
-GEMINI.md
+ignoredMarkDownDocs/
 target/
 .mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
@@ -43,3 +43,4 @@ build/
 
 ### VS Code ###
 .vscode/
+/ignoredMarkDownDocs/
