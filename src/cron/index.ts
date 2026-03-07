@@ -117,7 +117,7 @@ function formatMatchNotification(match: Match, userTimezone = 'UTC'): string {
     const tzAbbr = getTimezoneAbbreviation(matchDate, userTimezone);
 
     return `
-⚽️ <b>Upcoming Dota 2 Match!</b> ⚽️
+<b>Upcoming Dota 2 Match!</b>
 
 <b>${team1} vs ${team2}</b>
 🗓️ ${formattedTime} ${tzAbbr}
