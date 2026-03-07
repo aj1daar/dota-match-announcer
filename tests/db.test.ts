@@ -1,4 +1,7 @@
-import { getDb, Subscriber, TeamSubscription } from '../src/db/utils';
+import {
+    getDb,
+    Subscriber,
+    TeamSubscription } from '../src/db/utils';
 import { Env } from '../src';
 
 describe('D1 Database Utilities', () => {
@@ -31,6 +34,7 @@ describe('D1 Database Utilities', () => {
             const mockSubscriber: Subscriber = {
                 id: 1,
                 telegramId: 12345,
+                timezone: 'UTC',
                 createdAt: new Date().toISOString(),
             };
             mockStatement.all.mockResolvedValue({
@@ -41,9 +45,9 @@ describe('D1 Database Utilities', () => {
             const result = await db.createSubscriber(12345);
 
             expect(mockD1.prepare).toHaveBeenCalledWith(
-                'INSERT INTO Subscribers (telegramId) VALUES (?) RETURNING *',
+                'INSERT INTO Subscribers (telegramId, timezone) VALUES (?, ?) RETURNING *',
             );
-            expect(mockStatement.bind).toHaveBeenCalledWith(12345);
+            expect(mockStatement.bind).toHaveBeenCalledWith(12345, 'UTC');
             expect(mockStatement.all).toHaveBeenCalled();
             expect(result).toEqual(mockSubscriber);
         });
@@ -54,6 +58,7 @@ describe('D1 Database Utilities', () => {
             const mockSubscriber: Subscriber = {
                 id: 1,
                 telegramId: 12345,
+                timezone: 'UTC',
                 createdAt: new Date().toISOString(),
             };
             mockStatement.all.mockResolvedValue({
@@ -154,8 +159,8 @@ describe('D1 Database Utilities', () => {
     describe('getSubscribersByTeamId', () => {
         it('should return all subscribers for a given team', async () => {
             const mockSubscribers: Subscriber[] = [
-                { id: 1, telegramId: 12345, createdAt: new Date().toISOString() },
-                { id: 2, telegramId: 54321, createdAt: new Date().toISOString() },
+                { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+                { id: 2, telegramId: 54321, timezone: 'America/New_York', createdAt: new Date().toISOString() },
             ];
             mockStatement.all.mockResolvedValue({ results: mockSubscribers });
             const db = getDb(mockEnv);

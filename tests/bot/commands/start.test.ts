@@ -34,6 +34,7 @@ describe('startCommand', () => {
         const subscriber = {
             id: 1,
             telegramId: 12345,
+            timezone: 'UTC',
             createdAt: new Date().toISOString(),
         };
         (mockDb.getSubscriberByTelegramId as jest.Mock).mockResolvedValue(
@@ -45,7 +46,10 @@ describe('startCommand', () => {
         expect(mockDb.getSubscriberByTelegramId).toHaveBeenCalledWith(12345);
         expect(mockDb.createSubscriber).not.toHaveBeenCalled();
         expect(mockCtx.reply).toHaveBeenCalledWith(
-            'Welcome back to the Dota Match Announcer Bot!',
+            'Welcome back to the Dota Match Announcer Bot! 🎮\n\n' +
+            'Your current timezone: *UTC*\n' +
+            'Change it with /timezone if needed.',
+            { parse_mode: 'Markdown' }
         );
     });
 
@@ -54,6 +58,7 @@ describe('startCommand', () => {
         const newSubscriber = {
             id: 2,
             telegramId: 12345,
+            timezone: 'UTC',
             createdAt: new Date().toISOString(),
         };
         (mockDb.createSubscriber as jest.Mock).mockResolvedValue(newSubscriber);
@@ -61,9 +66,12 @@ describe('startCommand', () => {
         await startCommand(mockCtx);
 
         expect(mockDb.getSubscriberByTelegramId).toHaveBeenCalledWith(12345);
-        expect(mockDb.createSubscriber).toHaveBeenCalledWith(12345);
+        expect(mockDb.createSubscriber).toHaveBeenCalledWith(12345, 'UTC');
         expect(mockCtx.reply).toHaveBeenCalledWith(
-            'Welcome to the Dota Match Announcer Bot! You have been registered.',
+            'Welcome to the Dota Match Announcer Bot! 🎮\n\n' +
+            'You have been registered with timezone: *UTC*\n\n' +
+            'You can change your timezone anytime with /timezone command.',
+            { parse_mode: 'Markdown' }
         );
     });
 
