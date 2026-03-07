@@ -4,21 +4,25 @@ import { CustomContext } from './context';
 import { startCommand } from './commands/start';
 import { searchTeamCommand } from './commands/searchTeam';
 import { myTeamsCommand } from './commands/myTeams';
+import { timezoneCommand } from './commands/timezone';
 import { subscribeTeamCallback } from './callbacks/subscribeTeam';
 import { unsubscribeTeamCallback } from './callbacks/unsubscribeTeam';
+import { timezoneRegionCallback, timezoneSetCallback, timezoneBackCallback } from './callbacks/timezone';
 import { isDataCallbackQuery } from './utils';
 import { Update } from 'telegraf/types';
 
 let bot: Telegraf<CustomContext> | null = null;
 
-function getBot(token: string, env?: Env): Telegraf<CustomContext> {
+function getBot(token: string, env?: Env, request?: Request): Telegraf<CustomContext> {
     if (!bot) {
         bot = new Telegraf<CustomContext>(token);
 
-        // Register middleware to attach env to context
         if (env) {
             bot.use(async (ctx, next) => {
                 (ctx as CustomContext).env = env;
+                if (request) {
+                    (ctx as CustomContext).request = request;
+                }
                 await next();
             });
         }
@@ -39,6 +43,7 @@ function getBot(token: string, env?: Env): Telegraf<CustomContext> {
         bot.start(startCommand);
         bot.command('searchteam', searchTeamCommand);
         bot.command('myteams', myTeamsCommand);
+        bot.command('timezone', timezoneCommand);
 
         // Register callback query handler
         bot.on('callback_query', (ctx: CustomContext) => {
@@ -51,6 +56,12 @@ function getBot(token: string, env?: Env): Telegraf<CustomContext> {
                 return subscribeTeamCallback(ctx);
             } else if (callbackData.startsWith('unsubscribe_team')) {
                 return unsubscribeTeamCallback(ctx);
+            } else if (callbackData.startsWith('tz_region:')) {
+                return timezoneRegionCallback(ctx);
+            } else if (callbackData.startsWith('tz_set:')) {
+                return timezoneSetCallback(ctx);
+            } else if (callbackData === 'tz_back') {
+                return timezoneBackCallback(ctx);
             }
         });
     }
@@ -85,7 +96,7 @@ export const handleUpdate = async (request: Request, env: Env): Promise<Response
         };
 
         // Process the update with the bot
-        await getBot(env.TELEGRAM_BOT_TOKEN, env).handleUpdate(update, mockResponse);
+        await getBot(env.TELEGRAM_BOT_TOKEN, env, request).handleUpdate(update, mockResponse);
 
         return new Response('OK', { status: 200 });
     } catch (error) {
