@@ -1,5 +1,6 @@
 import { CustomContext } from '../context';
 import { getDb } from '../../db/utils';
+import { detectTimezoneFromRequest } from '../../utils/timezone';
 
 export const startCommand = async (ctx: CustomContext) => {
     try {
@@ -18,12 +19,25 @@ export const startCommand = async (ctx: CustomContext) => {
         const subscriber = await db.getSubscriberByTelegramId(telegramId);
 
         if (!subscriber) {
-            await db.createSubscriber(telegramId);
+            const detectedTimezone = ctx.request
+                ? detectTimezoneFromRequest(ctx.request)
+                : 'UTC';
+
+            await db.createSubscriber(telegramId, detectedTimezone);
+
             return ctx.reply(
-                'Welcome to the Dota Match Announcer Bot! You have been registered.',
+                'Welcome to the Dota Match Announcer Bot! 🎮\n\n' +
+                `You have been registered with timezone: *${detectedTimezone}*\n\n` +
+                'You can change your timezone anytime with /timezone command.',
+                { parse_mode: 'Markdown' }
             );
         } else {
-            return ctx.reply('Welcome back to the Dota Match Announcer Bot!');
+            return ctx.reply(
+                'Welcome back to the Dota Match Announcer Bot! 🎮\n\n' +
+                `Your current timezone: *${subscriber.timezone}*\n` +
+                'Change it with /timezone if needed.',
+                { parse_mode: 'Markdown' }
+            );
         }
     } catch (error) {
         console.error('Error in startCommand:', error);
