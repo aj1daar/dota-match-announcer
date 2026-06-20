@@ -228,6 +228,6 @@ export default {
         event: ScheduledEvent,
         env: Env
     ): Promise<void> {
-        await handleCron(env);
+        await handleCron(env, event.cron);
     },
 };
