@@ -216,6 +216,7 @@ describe('handleCron', () => {
         (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
         (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
         mockPandaScoreClient.getRunningMatches.mockResolvedValue([runningMatch]);
+        mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([]);
         (mockKv.get as jest.Mock).mockResolvedValue(null);
 
         await handleCron(mockEnv, LIVE_CRON);
@@ -273,8 +274,100 @@ describe('handleCron', () => {
         (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
         (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
         mockPandaScoreClient.getRunningMatches.mockResolvedValue([runningMatch]);
+        mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([]);
         (mockKv.get as jest.Mock).mockImplementation((key: string) => {
             if (key === 'game_100_1001') return Promise.resolve('true');
+            return Promise.resolve(null);
+        });
+
+        await handleCron(mockEnv, LIVE_CRON);
+
+        expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
+        expect(mockKv.put).not.toHaveBeenCalled();
+    });
+
+    // --- Final match result tests ---
+
+    it('should send final match result notification when a match finishes', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const finishedMatch: Match = {
+            id: 200,
+            name: 'Match 200',
+            status: 'finished',
+            begin_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+            end_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+            games: [],
+            opponents: [
+                { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
+                { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
+            ],
+            results: [
+                { score: 2, opponent_id: 10 },
+                { score: 1, opponent_id: 20 },
+            ],
+            league: { name: 'ESL One', image_url: null },
+            serie: { full_name: 'Spring 2024' },
+            streams_list: [],
+        };
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getRunningMatches.mockResolvedValue([]);
+        mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([finishedMatch]);
+        (mockKv.get as jest.Mock).mockResolvedValue(null);
+
+        await handleCron(mockEnv, LIVE_CRON);
+
+        expect(mockPandaScoreClient.getRecentlyFinishedMatches).toHaveBeenCalledWith([10]);
+        expect(mockKv.get).toHaveBeenCalledWith('match_final_200');
+        expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('Match Over'),
+            { parse_mode: 'HTML' },
+        );
+        expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('wins the series 2–1'),
+            { parse_mode: 'HTML' },
+        );
+        expect(mockKv.put).toHaveBeenCalledWith('match_final_200', 'true', { expirationTtl: 86400 });
+    });
+
+    it('should not re-send final result if already notified', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const finishedMatch: Match = {
+            id: 200,
+            name: 'Match 200',
+            status: 'finished',
+            begin_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+            end_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+            games: [],
+            opponents: [
+                { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
+                { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
+            ],
+            results: [{ score: 2, opponent_id: 10 }, { score: 0, opponent_id: 20 }],
+            league: { name: 'ESL One', image_url: null },
+            serie: { full_name: 'Spring 2024' },
+            streams_list: [],
+        };
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getRunningMatches.mockResolvedValue([]);
+        mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([finishedMatch]);
+        (mockKv.get as jest.Mock).mockImplementation((key: string) => {
+            if (key === 'match_final_200') return Promise.resolve('true');
             return Promise.resolve(null);
         });
 
@@ -322,6 +415,7 @@ describe('handleCron', () => {
         (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
         (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
         mockPandaScoreClient.getRunningMatches.mockResolvedValue([runningMatch]);
+        mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([]);
         (mockKv.get as jest.Mock).mockResolvedValue(null);
 
         await handleCron(mockEnv, LIVE_CRON);

@@ -89,6 +89,56 @@ function formatMapResultMessage(match: Match, game: Game): string {
 🏆 ${league} - ${serie}`;
 }
 
+function formatFinalResultMessage(match: Match): string {
+    const team1 = match.opponents[0]?.opponent;
+    const team2 = match.opponents[1]?.opponent;
+    const team1Name = team1?.name || 'TBD';
+    const team2Name = team2?.name || 'TBD';
+    const score1 = match.results.find(r => r.opponent_id === team1?.id)?.score ?? 0;
+    const score2 = match.results.find(r => r.opponent_id === team2?.id)?.score ?? 0;
+    const winnerName = score1 > score2 ? team1Name : team2Name;
+    const league = match.league.name;
+    const serie = match.serie.full_name;
+
+    return `\
+🏁 <b>Match Over</b>
+
+<b>${team1Name}</b> vs <b>${team2Name}</b>
+🏆 <b>${winnerName}</b> wins the series ${score1}–${score2}!
+
+🏆 ${league} - ${serie}`;
+}
+
+async function processFinishedMatches(
+    env: Env,
+    bot: Telegraf,
+    pandaScoreClient: PandaScoreClient,
+    maps: SubscriberMaps,
+): Promise<void> {
+    const finishedMatches = await pandaScoreClient.getRecentlyFinishedMatches(maps.uniqueTeamIds);
+    console.log(`[finished] Found ${finishedMatches.length} recently finished matches`);
+
+    for (const match of finishedMatches) {
+        const kvKey = `match_final_${match.id}`;
+        const alreadyNotified = await env.NOTIFICATIONS_KV.get(kvKey);
+        if (alreadyNotified) continue;
+
+        const telegramIds = getTelegramIdsForMatch(match, maps);
+        const message = formatFinalResultMessage(match);
+
+        for (const telegramId of telegramIds) {
+            try {
+                await bot.telegram.sendMessage(telegramId, message, { parse_mode: 'HTML' });
+            } catch (e) {
+                console.error(`[finished] Failed to send final result to ${telegramId}:`, e);
+            }
+        }
+
+        await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 86400 });
+        console.log(`[finished] Notified final result for match ${match.id}`);
+    }
+}
+
 async function processLiveMatches(
     env: Env,
     bot: Telegraf,
@@ -197,6 +247,7 @@ export async function handleCron(env: Env, cron?: string) {
         await processUpcomingMatches(env, bot, pandaScoreClient, maps);
     } else {
         await processLiveMatches(env, bot, pandaScoreClient, maps);
+        await processFinishedMatches(env, bot, pandaScoreClient, maps);
     }
 
     console.log('Cron job finished.');
