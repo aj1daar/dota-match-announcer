@@ -82,10 +82,12 @@ describe('myTeamsCommand', () => {
         expect(mockCtx.reply).toHaveBeenCalledWith('Your subscribed teams:', {
             reply_markup: {
                 inline_keyboard: [
+                    [{ text: '── Team Liquid ──', callback_data: 'noop' }],
                     [
                         { text: '📅 Schedule', callback_data: 'team_schedule:10:Team Liquid' },
                         { text: '❌ Unsubscribe', callback_data: 'unsubscribe_team:10:Team Liquid' },
                     ],
+                    [{ text: '── Team Secret ──', callback_data: 'noop' }],
                     [
                         { text: '📅 Schedule', callback_data: 'team_schedule:20:Team Secret' },
                         { text: '❌ Unsubscribe', callback_data: 'unsubscribe_team:20:Team Secret' },
