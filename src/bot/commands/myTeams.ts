@@ -29,7 +29,11 @@ export const myTeamsCommand = async (ctx: CustomContext) => {
 
         const keyboardButtons: InlineKeyboardButton[][] = subscriptions.map((sub) => [
             {
-                text: `Unsubscribe from ${sub.teamName}`,
+                text: '📅 Schedule',
+                callback_data: `team_schedule:${sub.teamId}:${sub.teamName}`,
+            },
+            {
+                text: '❌ Unsubscribe',
                 callback_data: `unsubscribe_team:${sub.teamId}:${sub.teamName}`,
             },
         ]);

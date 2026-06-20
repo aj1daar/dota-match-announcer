@@ -8,6 +8,7 @@ import { myTeamsCommand } from './commands/myTeams';
 import { timezoneCommand } from './commands/timezone';
 import { subscribeTeamCallback } from './callbacks/subscribeTeam';
 import { unsubscribeTeamCallback } from './callbacks/unsubscribeTeam';
+import { teamScheduleCallback } from './callbacks/teamSchedule';
 import { timezoneRegionCallback, timezoneSetCallback, timezoneBackCallback } from './callbacks/timezone';
 import { isDataCallbackQuery } from './utils';
 import { performTeamSearch } from './utils/performTeamSearch';
@@ -92,6 +93,8 @@ function getBot(token: string, env?: Env, request?: Request): Telegraf<CustomCon
                 return subscribeTeamCallback(ctx);
             } else if (callbackData.startsWith('unsubscribe_team')) {
                 return unsubscribeTeamCallback(ctx);
+            } else if (callbackData.startsWith('team_schedule:')) {
+                return teamScheduleCallback(ctx);
             } else if (callbackData.startsWith('tz_region:')) {
                 return timezoneRegionCallback(ctx);
             } else if (callbackData.startsWith('tz_set:')) {

@@ -83,16 +83,12 @@ describe('myTeamsCommand', () => {
             reply_markup: {
                 inline_keyboard: [
                     [
-                        {
-                            text: 'Unsubscribe from Team Liquid',
-                            callback_data: 'unsubscribe_team:10:Team Liquid',
-                        },
+                        { text: '📅 Schedule', callback_data: 'team_schedule:10:Team Liquid' },
+                        { text: '❌ Unsubscribe', callback_data: 'unsubscribe_team:10:Team Liquid' },
                     ],
                     [
-                        {
-                            text: 'Unsubscribe from Team Secret',
-                            callback_data: 'unsubscribe_team:20:Team Secret',
-                        },
+                        { text: '📅 Schedule', callback_data: 'team_schedule:20:Team Secret' },
+                        { text: '❌ Unsubscribe', callback_data: 'unsubscribe_team:20:Team Secret' },
                     ],
                 ],
             },
