@@ -7,6 +7,17 @@ export interface Team {
   image_url: string | null;
 }
 
+export interface Game {
+  id: number;
+  position: number;
+  status: 'not_started' | 'running' | 'finished';
+  winner: Team | null;
+  winner_type: 'Team' | null;
+  length: number | null;
+  begin_at: string | null;
+  end_at: string | null;
+}
+
 export interface Match {
   id: number;
   begin_at: string;
@@ -29,6 +40,7 @@ export interface Match {
     score: number;
     opponent_id: number;
   }>;
+  games: Game[];
   streams_list: Array<{
     raw_url: string;
     embed_url: string;
@@ -142,6 +154,30 @@ export class PandaScoreClient {
         return this.request<Match[]>('/matches/upcoming', {
             sort: 'begin_at',
             'filter[opponent_id]': teamIds.join(','),
+            'page[size]': 50,
+        });
+    }
+
+    async getRunningMatches(teamIds: number[]): Promise<Match[]> {
+        if (teamIds.length === 0) {
+            return [];
+        }
+        return this.request<Match[]>('/matches/running', {
+            'filter[opponent_id]': teamIds.join(','),
+            'page[size]': 50,
+        });
+    }
+
+    async getRecentlyFinishedMatches(teamIds: number[]): Promise<Match[]> {
+        if (teamIds.length === 0) {
+            return [];
+        }
+        const now = new Date();
+        const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+        return this.request<Match[]>('/matches/past', {
+            'filter[opponent_id]': teamIds.join(','),
+            'range[end_at]': `${twoHoursAgo.toISOString()},${now.toISOString()}`,
+            sort: '-end_at',
             'page[size]': 50,
         });
     }
