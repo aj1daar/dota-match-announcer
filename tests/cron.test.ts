@@ -236,6 +236,102 @@ describe('handleCron', () => {
         expect(mockKv.put).toHaveBeenCalledWith('game_100_1001', 'true', { expirationTtl: 86400 });
     });
 
+    it('should resolve winner name from opponents when game.winner has no name', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const runningMatch: Match = {
+            id: 100,
+            name: 'Match 100',
+            status: 'running',
+            begin_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+            end_at: null,
+            games: [
+                {
+                    id: 1001,
+                    position: 1,
+                    status: 'finished',
+                    winner: { id: 10, name: '', acronym: null, image_url: null },
+                    winner_type: 'Team',
+                    length: 2400,
+                    begin_at: null,
+                    end_at: null,
+                },
+            ],
+            opponents: [
+                { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
+                { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
+            ],
+            results: [{ score: 0, opponent_id: 10 }, { score: 0, opponent_id: 20 }],
+            league: { name: 'ESL One', image_url: null },
+            serie: { full_name: 'Spring 2024' },
+            streams_list: [],
+        };
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getRunningMatches.mockResolvedValue([runningMatch]);
+        mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([]);
+        (mockKv.get as jest.Mock).mockResolvedValue(null);
+
+        await handleCron(mockEnv, LIVE_CRON);
+
+        const msg = (mockBot.telegram.sendMessage as jest.Mock).mock.calls[0][1] as string;
+        expect(msg).toContain('Team Liquid');
+        expect(msg).not.toContain('Unknown');
+    });
+
+    it('should compute series score from games array, not match.results', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const runningMatch: Match = {
+            id: 100,
+            name: 'Match 100',
+            status: 'running',
+            begin_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+            end_at: null,
+            games: [
+                {
+                    id: 1001,
+                    position: 1,
+                    status: 'finished',
+                    winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
+                    winner_type: 'Team',
+                    length: 2400,
+                    begin_at: null,
+                    end_at: null,
+                },
+            ],
+            opponents: [
+                { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
+                { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
+            ],
+            // Results deliberately stale (not yet updated by PandaScore)
+            results: [{ score: 0, opponent_id: 10 }, { score: 0, opponent_id: 20 }],
+            league: { name: 'ESL One', image_url: null },
+            serie: { full_name: 'Spring 2024' },
+            streams_list: [],
+        };
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getRunningMatches.mockResolvedValue([runningMatch]);
+        mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([]);
+        (mockKv.get as jest.Mock).mockResolvedValue(null);
+
+        await handleCron(mockEnv, LIVE_CRON);
+
+        const msg = (mockBot.telegram.sendMessage as jest.Mock).mock.calls[0][1] as string;
+        expect(msg).toContain('Team Liquid 1 – 0 Team Secret');
+    });
+
     it('should not re-send per-map notification if already sent', async () => {
         const mockAllSubscriptions: TeamSubscription[] = [
             { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },

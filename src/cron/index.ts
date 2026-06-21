@@ -66,15 +66,23 @@ function formatSeriesScore(match: Match): string {
     const team1 = match.opponents[0]?.opponent;
     const team2 = match.opponents[1]?.opponent;
     if (!team1 || !team2) return '';
-    const score1 = match.results.find(r => r.opponent_id === team1.id)?.score ?? 0;
-    const score2 = match.results.find(r => r.opponent_id === team2.id)?.score ?? 0;
+    let score1 = 0;
+    let score2 = 0;
+    for (const g of match.games || []) {
+        if (g.status === 'finished' && g.winner) {
+            if (g.winner.id === team1.id) score1++;
+            else if (g.winner.id === team2.id) score2++;
+        }
+    }
     return `${team1.name} ${score1} – ${score2} ${team2.name}`;
 }
 
 function formatMapResultMessage(match: Match, game: Game): string {
     const team1 = match.opponents[0]?.opponent.name || 'TBD';
     const team2 = match.opponents[1]?.opponent.name || 'TBD';
-    const winnerName = game.winner?.name || 'Unknown';
+    const winnerName = game.winner?.name
+        || match.opponents.find(o => o.opponent.id === game.winner?.id)?.opponent.name
+        || 'Unknown';
     const seriesScore = formatSeriesScore(match);
     const league = match.league.name;
     const serie = match.serie.full_name;
