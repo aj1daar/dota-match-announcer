@@ -101,8 +101,6 @@ function getBot(token: string, env?: Env, request?: Request): Telegraf<CustomCon
                 return timezoneSetCallback(ctx);
             } else if (callbackData === 'tz_back') {
                 return timezoneBackCallback(ctx);
-            } else if (callbackData === 'noop') {
-                return ctx.answerCbQuery();
             }
         });
     }

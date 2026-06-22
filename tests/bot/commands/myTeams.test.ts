@@ -79,22 +79,23 @@ describe('myTeamsCommand', () => {
 
         await myTeamsCommand(mockCtx as CustomContext);
 
-        expect(mockCtx.reply).toHaveBeenCalledWith('Your subscribed teams:', {
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: '── Team Liquid ──', callback_data: 'noop' }],
-                    [
-                        { text: '📅 Schedule', callback_data: 'team_schedule:10:Team Liquid' },
-                        { text: '❌ Unsubscribe', callback_data: 'unsubscribe_team:10:Team Liquid' },
+        expect(mockCtx.reply).toHaveBeenCalledWith(
+            'Your subscribed teams:\n\n• Team Liquid\n• Team Secret',
+            {
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: '📅 Schedule', callback_data: 'team_schedule:10:Team Liquid' },
+                            { text: '❌ Team Liquid', callback_data: 'unsubscribe_team:10:Team Liquid' },
+                        ],
+                        [
+                            { text: '📅 Schedule', callback_data: 'team_schedule:20:Team Secret' },
+                            { text: '❌ Team Secret', callback_data: 'unsubscribe_team:20:Team Secret' },
+                        ],
                     ],
-                    [{ text: '── Team Secret ──', callback_data: 'noop' }],
-                    [
-                        { text: '📅 Schedule', callback_data: 'team_schedule:20:Team Secret' },
-                        { text: '❌ Unsubscribe', callback_data: 'unsubscribe_team:20:Team Secret' },
-                    ],
-                ],
+                },
             },
-        });
+        );
     });
 
     it('should inform the user if they are not a subscriber yet', async () => {

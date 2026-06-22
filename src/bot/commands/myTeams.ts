@@ -27,26 +27,21 @@ export const myTeamsCommand = async (ctx: CustomContext) => {
             );
         }
 
-        const keyboardButtons: InlineKeyboardButton[][] = subscriptions.flatMap((sub) => [
-            [
-                {
-                    text: `── ${sub.teamName} ──`,
-                    callback_data: 'noop',
-                },
-            ],
-            [
-                {
-                    text: '📅 Schedule',
-                    callback_data: `team_schedule:${sub.teamId}:${sub.teamName}`,
-                },
-                {
-                    text: '❌ Unsubscribe',
-                    callback_data: `unsubscribe_team:${sub.teamId}:${sub.teamName}`,
-                },
-            ],
+        const teamNames = subscriptions.map((sub) => `• ${sub.teamName}`).join('\n');
+        const message = `Your subscribed teams:\n\n${teamNames}`;
+
+        const keyboardButtons: InlineKeyboardButton[][] = subscriptions.map((sub) => [
+            {
+                text: '📅 Schedule',
+                callback_data: `team_schedule:${sub.teamId}:${sub.teamName}`,
+            },
+            {
+                text: `❌ ${sub.teamName}`,
+                callback_data: `unsubscribe_team:${sub.teamId}:${sub.teamName}`,
+            },
         ]);
 
-        return ctx.reply('Your subscribed teams:', {
+        return ctx.reply(message, {
             reply_markup: {
                 inline_keyboard: keyboardButtons,
             },
