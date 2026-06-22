@@ -7,11 +7,16 @@ export interface Team {
   image_url: string | null;
 }
 
+export interface GameWinner {
+  id: number | null;
+  type: string;
+}
+
 export interface Game {
   id: number;
   position: number;
   status: 'not_started' | 'running' | 'finished';
-  winner: Team | null;
+  winner: GameWinner | null;
   winner_type: 'Team' | null;
   length: number | null;
   begin_at: string | null;
@@ -25,6 +30,7 @@ export interface Match {
   status: 'not_started' | 'running' | 'finished' | 'canceled';
   name: string;
   number_of_games?: number;
+  winner: Team | null;
   league: {
     name: string;
     image_url: string | null;
@@ -38,7 +44,7 @@ export interface Match {
   }>;
   results: Array<{
     score: number;
-    opponent_id: number;
+    team_id: number;
   }>;
   games: Game[];
   streams_list: Array<{
@@ -67,7 +73,6 @@ export class PandaScoreClient {
     ): Promise<T> {
         const url = new URL(`${this.baseUrl}${endpoint}`);
 
-        // Add query parameters
         if (params) {
             for (const key in params) {
                 if (Object.prototype.hasOwnProperty.call(params, key)) {
@@ -76,7 +81,6 @@ export class PandaScoreClient {
             }
         }
 
-        // Make request with Authorization header
         console.log(`[PandaScore] Requesting: ${url.toString()}`);
         const response = await fetch(url.toString(), {
             headers: {
@@ -112,7 +116,6 @@ export class PandaScoreClient {
         let hasMore = true;
 
         while (hasMore && page <= 10) {
-            // Limit to 10 pages to avoid excessive API calls
             console.log(`[PandaScore] Fetching teams page ${page}...`);
 
             const teams = await this.request<Team[]>('/teams', {
@@ -131,7 +134,6 @@ export class PandaScoreClient {
 
         console.log(`[PandaScore] Fetched ${allTeams.length} total teams`);
 
-        // Client-side filtering
         const lowerName = name.toLowerCase();
         const matchingTeams = allTeams.filter(team => {
             const nameMatch = team.name.toLowerCase().includes(lowerName);
@@ -180,5 +182,9 @@ export class PandaScoreClient {
             sort: '-end_at',
             'page[size]': 50,
         });
+    }
+
+    async getMatchById(matchId: number): Promise<Match> {
+        return this.request<Match>(`/matches/${matchId}`);
     }
 }
