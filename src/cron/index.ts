@@ -80,9 +80,7 @@ function formatSeriesScore(match: Match): string {
 function formatMapResultMessage(match: Match, game: Game): string {
     const team1 = match.opponents[0]?.opponent.name || 'TBD';
     const team2 = match.opponents[1]?.opponent.name || 'TBD';
-    const winnerName = game.winner?.name
-        || match.opponents.find(o => o.opponent.id === game.winner?.id)?.opponent.name
-        || 'Unknown';
+    const winnerName = match.opponents.find(o => o.opponent.id === game.winner?.id)?.opponent.name || 'Unknown';
     const seriesScore = formatSeriesScore(match);
     const league = match.league.name;
     const serie = match.serie.full_name;
@@ -102,9 +100,15 @@ function formatFinalResultMessage(match: Match): string {
     const team2 = match.opponents[1]?.opponent;
     const team1Name = team1?.name || 'TBD';
     const team2Name = team2?.name || 'TBD';
-    const score1 = match.results.find(r => r.opponent_id === team1?.id)?.score ?? 0;
-    const score2 = match.results.find(r => r.opponent_id === team2?.id)?.score ?? 0;
-    const winnerName = score1 > score2 ? team1Name : team2Name;
+    const winnerName = match.winner?.name || 'Unknown';
+    let score1 = 0;
+    let score2 = 0;
+    for (const g of match.games || []) {
+        if (g.status === 'finished' && g.winner?.id) {
+            if (g.winner.id === team1?.id) score1++;
+            else if (g.winner.id === team2?.id) score2++;
+        }
+    }
     const league = match.league.name;
     const serie = match.serie.full_name;
 
@@ -126,10 +130,23 @@ async function processFinishedMatches(
     const finishedMatches = await pandaScoreClient.getRecentlyFinishedMatches(maps.uniqueTeamIds);
     console.log(`[finished] Found ${finishedMatches.length} recently finished matches`);
 
-    for (const match of finishedMatches) {
+    for (let match of finishedMatches) {
         const kvKey = `match_final_${match.id}`;
         const alreadyNotified = await env.NOTIFICATIONS_KV.get(kvKey);
         if (alreadyNotified) continue;
+
+        if (!match.winner?.id) {
+            console.log(`[finished] Winner not yet available for match ${match.id}, re-fetching...`);
+            try {
+                match = await pandaScoreClient.getMatchById(match.id);
+            } catch (e) {
+                console.error(`[finished] Re-fetch failed for match ${match.id}:`, e);
+            }
+            if (!match.winner?.id) {
+                console.log(`[finished] Still no winner for match ${match.id}, skipping until next run`);
+                continue;
+            }
+        }
 
         const telegramIds = getTelegramIdsForMatch(match, maps);
         const message = formatFinalResultMessage(match);
@@ -158,7 +175,7 @@ async function processLiveMatches(
 
     for (const match of runningMatches) {
         const finishedGames = (match.games || []).filter(
-            (g: Game) => g.status === 'finished' && g.winner,
+            (g: Game) => g.status === 'finished' && g.winner?.id != null,
         );
 
         for (const game of finishedGames) {

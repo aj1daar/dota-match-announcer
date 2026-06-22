@@ -1,6 +1,6 @@
 import { handleCron } from '../src/cron';
 import { Env } from '../src';
-import { PandaScoreClient, Match } from '../src/pandascore';
+import { PandaScoreClient, Match, GameWinner } from '../src/pandascore';
 import { getDb, Subscriber, TeamSubscription } from '../src/db/utils';
 import { Telegraf } from 'telegraf';
 
@@ -188,12 +188,13 @@ describe('handleCron', () => {
             status: 'running',
             begin_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
             end_at: null,
+            winner: null,
             games: [
                 {
                     id: 1001,
                     position: 1,
                     status: 'finished',
-                    winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
+                    winner: { id: 10, type: 'Team' } as GameWinner,
                     winner_type: 'Team',
                     length: 2400,
                     begin_at: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
@@ -205,8 +206,8 @@ describe('handleCron', () => {
                 { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
             ],
             results: [
-                { score: 1, opponent_id: 10 },
-                { score: 0, opponent_id: 20 },
+                { score: 1, team_id: 10 },
+                { score: 0, team_id: 20 },
             ],
             league: { name: 'ESL One', image_url: null },
             serie: { full_name: 'Spring 2024' },
@@ -236,7 +237,7 @@ describe('handleCron', () => {
         expect(mockKv.put).toHaveBeenCalledWith('game_100_1001', 'true', { expirationTtl: 86400 });
     });
 
-    it('should resolve winner name from opponents when game.winner has no name', async () => {
+    it('should resolve winner name from opponents since game.winner only has id and type', async () => {
         const mockAllSubscriptions: TeamSubscription[] = [
             { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
         ];
@@ -249,12 +250,13 @@ describe('handleCron', () => {
             status: 'running',
             begin_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
             end_at: null,
+            winner: null,
             games: [
                 {
                     id: 1001,
                     position: 1,
                     status: 'finished',
-                    winner: { id: 10, name: '', acronym: null, image_url: null },
+                    winner: { id: 10, type: 'Team' } as GameWinner,
                     winner_type: 'Team',
                     length: 2400,
                     begin_at: null,
@@ -265,7 +267,7 @@ describe('handleCron', () => {
                 { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
                 { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
             ],
-            results: [{ score: 0, opponent_id: 10 }, { score: 0, opponent_id: 20 }],
+            results: [{ score: 0, team_id: 10 }, { score: 0, team_id: 20 }],
             league: { name: 'ESL One', image_url: null },
             serie: { full_name: 'Spring 2024' },
             streams_list: [],
@@ -297,12 +299,13 @@ describe('handleCron', () => {
             status: 'running',
             begin_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
             end_at: null,
+            winner: null,
             games: [
                 {
                     id: 1001,
                     position: 1,
                     status: 'finished',
-                    winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
+                    winner: { id: 10, type: 'Team' } as GameWinner,
                     winner_type: 'Team',
                     length: 2400,
                     begin_at: null,
@@ -313,8 +316,8 @@ describe('handleCron', () => {
                 { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
                 { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
             ],
-            // Results deliberately stale (not yet updated by PandaScore)
-            results: [{ score: 0, opponent_id: 10 }, { score: 0, opponent_id: 20 }],
+            // Results stale — score must still be computed from games above
+            results: [{ score: 0, team_id: 10 }, { score: 0, team_id: 20 }],
             league: { name: 'ESL One', image_url: null },
             serie: { full_name: 'Spring 2024' },
             streams_list: [],
@@ -345,12 +348,13 @@ describe('handleCron', () => {
             status: 'running',
             begin_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
             end_at: null,
+            winner: null,
             games: [
                 {
                     id: 1001,
                     position: 1,
                     status: 'finished',
-                    winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
+                    winner: { id: 10, type: 'Team' } as GameWinner,
                     winner_type: 'Team',
                     length: 2400,
                     begin_at: null,
@@ -361,7 +365,7 @@ describe('handleCron', () => {
                 { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
                 { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
             ],
-            results: [{ score: 1, opponent_id: 10 }, { score: 0, opponent_id: 20 }],
+            results: [{ score: 1, team_id: 10 }, { score: 0, team_id: 20 }],
             league: { name: 'ESL One', image_url: null },
             serie: { full_name: 'Spring 2024' },
             streams_list: [],
@@ -397,14 +401,19 @@ describe('handleCron', () => {
             status: 'finished',
             begin_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
             end_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
-            games: [],
+            winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
+            games: [
+                { id: 2001, position: 1, status: 'finished', winner: { id: 10, type: 'Team' } as GameWinner, winner_type: 'Team', length: 2400, begin_at: null, end_at: null },
+                { id: 2002, position: 2, status: 'finished', winner: { id: 20, type: 'Team' } as GameWinner, winner_type: 'Team', length: 2100, begin_at: null, end_at: null },
+                { id: 2003, position: 3, status: 'finished', winner: { id: 10, type: 'Team' } as GameWinner, winner_type: 'Team', length: 1800, begin_at: null, end_at: null },
+            ],
             opponents: [
                 { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
                 { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
             ],
             results: [
-                { score: 2, opponent_id: 10 },
-                { score: 1, opponent_id: 20 },
+                { score: 2, team_id: 10 },
+                { score: 1, team_id: 20 },
             ],
             league: { name: 'ESL One', image_url: null },
             serie: { full_name: 'Spring 2024' },
@@ -447,12 +456,13 @@ describe('handleCron', () => {
             status: 'finished',
             begin_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
             end_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+            winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
             games: [],
             opponents: [
                 { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
                 { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
             ],
-            results: [{ score: 2, opponent_id: 10 }, { score: 0, opponent_id: 20 }],
+            results: [{ score: 2, team_id: 10 }, { score: 0, team_id: 20 }],
             league: { name: 'ESL One', image_url: null },
             serie: { full_name: 'Spring 2024' },
             streams_list: [],
@@ -486,6 +496,7 @@ describe('handleCron', () => {
             status: 'running',
             begin_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
             end_at: null,
+            winner: null,
             games: [
                 {
                     id: 1001,
@@ -502,7 +513,7 @@ describe('handleCron', () => {
                 { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
                 { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
             ],
-            results: [{ score: 0, opponent_id: 10 }, { score: 0, opponent_id: 20 }],
+            results: [{ score: 0, team_id: 10 }, { score: 0, team_id: 20 }],
             league: { name: 'ESL One', image_url: null },
             serie: { full_name: 'Spring 2024' },
             streams_list: [],
@@ -516,6 +527,101 @@ describe('handleCron', () => {
 
         await handleCron(mockEnv, LIVE_CRON);
 
+        expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
+        expect(mockKv.put).not.toHaveBeenCalled();
+    });
+
+    it('should retry getMatchById when match.winner is null and send once winner is available', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const finishedMatchNoWinner: Match = {
+            id: 300,
+            name: 'Match 300',
+            status: 'finished',
+            begin_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+            end_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+            winner: null,
+            games: [],
+            opponents: [
+                { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
+                { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
+            ],
+            results: [],
+            league: { name: 'ESL One', image_url: null },
+            serie: { full_name: 'Spring 2024' },
+            streams_list: [],
+        };
+        const finishedMatchWithWinner: Match = {
+            ...finishedMatchNoWinner,
+            winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
+            games: [
+                { id: 3001, position: 1, status: 'finished', winner: { id: 10, type: 'Team' } as GameWinner, winner_type: 'Team', length: 2400, begin_at: null, end_at: null },
+                { id: 3002, position: 2, status: 'finished', winner: { id: 10, type: 'Team' } as GameWinner, winner_type: 'Team', length: 1800, begin_at: null, end_at: null },
+            ],
+        };
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getRunningMatches.mockResolvedValue([]);
+        mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([finishedMatchNoWinner]);
+        mockPandaScoreClient.getMatchById.mockResolvedValue(finishedMatchWithWinner);
+        (mockKv.get as jest.Mock).mockResolvedValue(null);
+
+        await handleCron(mockEnv, LIVE_CRON);
+
+        expect(mockPandaScoreClient.getMatchById).toHaveBeenCalledWith(300);
+        expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('Match Over'),
+            { parse_mode: 'HTML' },
+        );
+        expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('wins the series 2–0'),
+            { parse_mode: 'HTML' },
+        );
+        expect(mockKv.put).toHaveBeenCalledWith('match_final_300', 'true', { expirationTtl: 86400 });
+    });
+
+    it('should skip match when winner still unavailable after getMatchById retry', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const finishedMatchNoWinner: Match = {
+            id: 400,
+            name: 'Match 400',
+            status: 'finished',
+            begin_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+            end_at: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+            winner: null,
+            games: [],
+            opponents: [
+                { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
+                { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
+            ],
+            results: [],
+            league: { name: 'ESL One', image_url: null },
+            serie: { full_name: 'Spring 2024' },
+            streams_list: [],
+        };
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getRunningMatches.mockResolvedValue([]);
+        mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([finishedMatchNoWinner]);
+        mockPandaScoreClient.getMatchById.mockResolvedValue({ ...finishedMatchNoWinner, winner: null });
+        (mockKv.get as jest.Mock).mockResolvedValue(null);
+
+        await handleCron(mockEnv, LIVE_CRON);
+
+        expect(mockPandaScoreClient.getMatchById).toHaveBeenCalledWith(400);
         expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
         expect(mockKv.put).not.toHaveBeenCalled();
     });
