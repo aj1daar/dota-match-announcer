@@ -15,13 +15,16 @@ describe('unsubscribeTeamCallback', () => {
         mockCtx = {
             from: { id: 12345, is_bot: false, first_name: 'Test' },
             answerCbQuery: jest.fn(),
-            editMessageText: jest.fn(),
-            callbackQuery: { data: 'unsubscribe_team:10:Team Liquid' } as any,
+            editMessageText: jest.fn().mockResolvedValue(undefined),
+            callbackQuery: { data: 'unsubscribe_team:10' } as any,
             env: mockEnv,
         } as Partial<CustomContext>;
 
         mockDb = {
             getSubscriberByTelegramId: jest.fn(),
+            getSubscriptionsBySubscriberId: jest.fn().mockResolvedValue([
+                { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
+            ]),
             unsubscribeTeam: jest.fn(),
         } as unknown as ReturnType<typeof getDb>;
 
@@ -38,16 +41,13 @@ describe('unsubscribeTeamCallback', () => {
             telegramId: 12345,
             createdAt: new Date().toISOString(),
         };
-        (mockDb.getSubscriberByTelegramId as jest.Mock).mockResolvedValue(
-            subscriber,
-        );
+        (mockDb.getSubscriberByTelegramId as jest.Mock).mockResolvedValue(subscriber);
 
         await unsubscribeTeamCallback(mockCtx as CustomContext);
 
+        expect(mockDb.getSubscriptionsBySubscriberId).toHaveBeenCalledWith(1);
         expect(mockDb.unsubscribeTeam).toHaveBeenCalledWith(1, 10);
-        expect(mockCtx.answerCbQuery).toHaveBeenCalledWith(
-            'Unsubscribed from Team Liquid.',
-        );
+        expect(mockCtx.answerCbQuery).toHaveBeenCalledWith('Unsubscribed from Team Liquid.');
         expect(mockCtx.editMessageText).toHaveBeenCalledWith(
             'You have successfully unsubscribed from Team Liquid.',
         );

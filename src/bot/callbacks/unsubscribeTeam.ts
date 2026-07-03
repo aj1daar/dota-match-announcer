@@ -9,15 +9,14 @@ export const unsubscribeTeamCallback = async (ctx: CustomContext) => {
 
     const callbackData = ctx.callbackQuery.data;
     const parts = callbackData.split(':');
-    if (parts.length !== 3 || parts[0] !== 'unsubscribe_team') {
+    if (parts.length < 2 || parts[0] !== 'unsubscribe_team') {
         return ctx.answerCbQuery('Invalid callback data.');
     }
 
     const teamId = parseInt(parts[1], 10);
-    const teamName = parts[2];
     const telegramId = ctx.from?.id;
 
-    if (!telegramId) {
+    if (!telegramId || isNaN(teamId)) {
         return ctx.answerCbQuery('Could not identify your Telegram ID.');
     }
 
@@ -28,14 +27,20 @@ export const unsubscribeTeamCallback = async (ctx: CustomContext) => {
         return ctx.answerCbQuery('You are not a subscriber.');
     }
 
+    const subscriptions = await db.getSubscriptionsBySubscriberId(subscriber.id);
+    const teamName = subscriptions.find((s) => s.teamId === teamId)?.teamName || `Team ${teamId}`;
+
     try {
         await db.unsubscribeTeam(subscriber.id, teamId);
         await ctx.answerCbQuery(`Unsubscribed from ${teamName}.`);
-        return ctx.editMessageText(
+        await ctx.editMessageText(
             `You have successfully unsubscribed from ${teamName}.`,
-        );
+        ).catch((e) => {
+            console.error('[unsubscribe] editMessageText failed, falling back to reply:', e);
+            return ctx.reply(`Unsubscribed from <b>${teamName}</b>.`, { parse_mode: 'HTML' }).catch(console.error);
+        });
     } catch (error) {
         console.error('Error unsubscribing from team:', error);
-        return ctx.answerCbQuery('Failed to unsubscribe from team.');
+        await ctx.answerCbQuery('Failed to unsubscribe from team.');
     }
 };

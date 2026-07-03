@@ -15,7 +15,7 @@ describe('subscribeTeamCallback', () => {
         mockCtx = {
             from: { id: 12345, is_bot: false, first_name: 'Test' },
             answerCbQuery: jest.fn(),
-            editMessageText: jest.fn(),
+            editMessageText: jest.fn().mockResolvedValue(undefined),
             callbackQuery: { data: 'subscribe_team:10:Team Liquid' } as any,
             env: mockEnv,
         } as Partial<CustomContext>;

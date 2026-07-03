@@ -37,7 +37,7 @@ export const myTeamsCommand = async (ctx: CustomContext) => {
             },
             {
                 text: `❌ ${sub.teamName}`,
-                callback_data: `unsubscribe_team:${sub.teamId}:${sub.teamName}`,
+                callback_data: `unsubscribe_team:${sub.teamId}`,
             },
         ]);
 
@@ -47,8 +47,9 @@ export const myTeamsCommand = async (ctx: CustomContext) => {
             },
         });
     } catch (error) {
-        console.error('Error in myTeamsCommand:', error);
-        return ctx.reply('An error occurred while retrieving your teams. Please try again.').catch(() => {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.error('Error in myTeamsCommand:', msg);
+        return ctx.reply(`An error occurred while retrieving your teams: ${msg}`).catch(() => {
             console.error('Failed to send error message');
         });
     }

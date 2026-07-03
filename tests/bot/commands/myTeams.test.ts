@@ -86,11 +86,11 @@ describe('myTeamsCommand', () => {
                     inline_keyboard: [
                         [
                             { text: '📅 Schedule', callback_data: 'team_schedule:10:Team Liquid' },
-                            { text: '❌ Team Liquid', callback_data: 'unsubscribe_team:10:Team Liquid' },
+                            { text: '❌ Team Liquid', callback_data: 'unsubscribe_team:10' },
                         ],
                         [
                             { text: '📅 Schedule', callback_data: 'team_schedule:20:Team Secret' },
-                            { text: '❌ Team Secret', callback_data: 'unsubscribe_team:20:Team Secret' },
+                            { text: '❌ Team Secret', callback_data: 'unsubscribe_team:20' },
                         ],
                     ],
                 },

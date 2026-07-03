@@ -40,14 +40,18 @@ export const subscribeTeamCallback = async (ctx: CustomContext) => {
         const subscription = await db.subscribeTeam(subscriber.id, teamId, teamName);
         console.log(`Successfully subscribed user ${subscriber.id} to team ${teamId}:`, subscription);
         await ctx.answerCbQuery(`Subscribed to ${teamName}!`);
-        return ctx.editMessageText(`You are now subscribed to ${teamName}.`);
+        await ctx.editMessageText(`You are now subscribed to ${teamName}.`).catch((e) => {
+            console.error('[subscribe] editMessageText failed, falling back to reply:', e);
+            return ctx.reply(`You are now subscribed to <b>${teamName}</b>!`, { parse_mode: 'HTML' }).catch(console.error);
+        });
     } catch (error: any) {
         console.error('Error subscribing to team:', error);
         if (error.message && error.message.includes('UNIQUE constraint failed')) {
             console.log(`User ${subscriber.id} is already subscribed to team ${teamId}`);
-            return ctx.answerCbQuery(`You are already subscribed to ${teamName}.`);
+            await ctx.answerCbQuery(`You are already subscribed to ${teamName}.`);
+            return;
         }
         console.error('Failed to subscribe - unexpected error:', error.message || String(error));
-        return ctx.answerCbQuery('Failed to subscribe to team.');
+        await ctx.answerCbQuery('Failed to subscribe to team.');
     }
 };
