@@ -119,6 +119,44 @@ describe('PandaScoreClient', () => {
                 { expirationTtl: 3600 },
             );
         });
+
+        it('should refresh the cache and retry when a newly added team has no cached match', async () => {
+            const staleTeams: Team[] = [
+                { id: 1, name: 'Other Team', acronym: 'OT', image_url: null },
+            ];
+            mockKv.get.mockResolvedValue(JSON.stringify(staleTeams));
+
+            const freshTeams: Team[] = [
+                { id: 1, name: 'Other Team', acronym: 'OT', image_url: null },
+                { id: 2, name: 'Brand New Team', acronym: 'BNT', image_url: null },
+            ];
+            fetchMock.mockResponseOnce(JSON.stringify(freshTeams));
+            fetchMock.mockResponseOnce(JSON.stringify([]));
+
+            const teams = await client.searchTeams('Brand New');
+
+            expect(teams).toEqual([freshTeams[1]]);
+            expect(fetchMock.mock.calls.length).toEqual(2);
+            expect(mockKv.put).toHaveBeenCalledWith(
+                'pandascore_teams_cache',
+                JSON.stringify(freshTeams),
+                { expirationTtl: 3600 },
+            );
+        });
+
+        it('should not hit the API again if a fresh refresh still finds no match', async () => {
+            const cachedTeams: Team[] = [
+                { id: 1, name: 'Other Team', acronym: 'OT', image_url: null },
+            ];
+            mockKv.get.mockResolvedValue(JSON.stringify(cachedTeams));
+            fetchMock.mockResponseOnce(JSON.stringify(cachedTeams));
+            fetchMock.mockResponseOnce(JSON.stringify([]));
+
+            const teams = await client.searchTeams('Nonexistent');
+
+            expect(teams).toEqual([]);
+            expect(fetchMock.mock.calls.length).toEqual(2);
+        });
     });
 
     describe('getUpcomingMatches', () => {

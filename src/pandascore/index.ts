@@ -191,9 +191,22 @@ export class PandaScoreClient {
             }
         }
 
+        return this.refreshTeamsCache();
+    }
+
+    private async refreshTeamsCache(): Promise<Team[]> {
         const allTeams = await this.fetchAllTeams();
         await this.kv.put(TEAMS_CACHE_KEY, JSON.stringify(allTeams), { expirationTtl: TEAMS_CACHE_TTL_SECONDS });
         return allTeams;
+    }
+
+    private filterTeams(teams: Team[], name: string): Team[] {
+        const lowerName = name.toLowerCase();
+        return teams.filter(team => {
+            const nameMatch = team.name.toLowerCase().includes(lowerName);
+            const acronymMatch = team.acronym && team.acronym.toLowerCase().includes(lowerName);
+            return nameMatch || acronymMatch;
+        });
     }
 
     async searchTeams(name: string): Promise<Team[]> {
@@ -204,13 +217,18 @@ export class PandaScoreClient {
          * full team list (cached in KV) and filter client-side instead.
          */
         const allTeams = await this.getAllTeamsCached();
+        let matchingTeams = this.filterTeams(allTeams, name);
 
-        const lowerName = name.toLowerCase();
-        const matchingTeams = allTeams.filter(team => {
-            const nameMatch = team.name.toLowerCase().includes(lowerName);
-            const acronymMatch = team.acronym && team.acronym.toLowerCase().includes(lowerName);
-            return nameMatch || acronymMatch;
-        });
+        if (matchingTeams.length === 0) {
+            /*
+             * The cache can be up to an hour stale, which would hide a team that
+             * was only just added or renamed. A search with zero hits is cheap
+             * to double-check against a fresh fetch before giving up on it.
+             */
+            console.log('[PandaScore] No cached matches, refreshing team list before giving up');
+            const freshTeams = await this.refreshTeamsCache();
+            matchingTeams = this.filterTeams(freshTeams, name);
+        }
 
         console.log(
             `[PandaScore] Found ${matchingTeams.length} teams matching "${name}":`,
