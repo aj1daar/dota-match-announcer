@@ -50,7 +50,7 @@ export interface Match {
   tournament_id?: number | null;
   tournament?: Tournament | null;
   opponents: Array<{
-    opponent: Team;
+    opponent: Team | null;
     type: 'Team';
   }>;
   results: Array<{

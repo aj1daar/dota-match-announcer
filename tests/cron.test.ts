@@ -210,6 +210,49 @@ describe('handleCron', () => {
         expect(mockKv.put).toHaveBeenCalledWith('match_announced_tbd_501', 'true', { expirationTtl: 2592000 });
     });
 
+    it('should not crash when a TBD slot is a present opponents entry with a null opponent', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const matches: Match[] = [
+            {
+                id: 504,
+                name: 'Lower Bracket Round 3',
+                begin_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+                end_at: null,
+                status: 'not_started',
+                winner: null,
+                games: [],
+                // PandaScore sometimes reserves both slots up front, leaving the TBD side null rather than omitting it.
+                opponents: [
+                    { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
+                    { opponent: null, type: 'Team' },
+                ],
+                league: { name: 'ESL One', image_url: null },
+                serie: { full_name: 'Spring 2024' },
+                results: [],
+                streams_list: [],
+            } as Match,
+        ];
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getUpcomingMatches.mockResolvedValue(matches);
+        (mockKv.get as jest.Mock).mockResolvedValue(null);
+
+        await expect(handleCron(mockEnv, LIVE_CRON)).resolves.toBeUndefined();
+
+        expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('Opponent not yet known'),
+            { parse_mode: 'HTML' },
+        );
+        expect(mockKv.put).toHaveBeenCalledWith('match_announced_tbd_504', 'true', { expirationTtl: 2592000 });
+    });
+
     it('should announce the confirmed opponent once it resolves, even after the TBD announcement already fired', async () => {
         const mockAllSubscriptions: TeamSubscription[] = [
             { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },

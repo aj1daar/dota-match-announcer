@@ -45,8 +45,8 @@ export const teamScheduleCallback = async (ctx: CustomContext) => {
         const lines: string[] = [`📅 <b>Upcoming matches for ${escapedTeamName}:</b>`];
 
         for (const match of upcoming) {
-            const opp1 = escapeHtml(match.opponents[0]?.opponent.name || 'TBD');
-            const opp2 = escapeHtml(match.opponents[1]?.opponent.name || 'TBD');
+            const opp1 = escapeHtml(match.opponents[0]?.opponent?.name || 'TBD');
+            const opp2 = escapeHtml(match.opponents[1]?.opponent?.name || 'TBD');
             const matchDate = new Date(match.begin_at);
             const formattedTime = formatMatchTime(match.begin_at, userTimezone);
             const tzAbbr = getTimezoneAbbreviation(matchDate, userTimezone);

@@ -50,6 +50,8 @@ function getTelegramIdsForMatch(
 ): number[] {
     const telegramIds = new Set<number>();
     for (const { opponent } of match.opponents) {
+        // A TBD bracket slot can be a present entry with a null opponent.
+        if (!opponent) continue;
         const subscriberIds = maps.teamIdToSubscriberIds.get(opponent.id);
         if (subscriberIds) {
             for (const subId of subscriberIds) {
@@ -77,9 +79,9 @@ function formatSeriesScore(match: Match): string {
 }
 
 function formatMapResultMessage(match: Match, game: Game): string {
-    const team1 = escapeHtml(match.opponents[0]?.opponent.name || 'TBD');
-    const team2 = escapeHtml(match.opponents[1]?.opponent.name || 'TBD');
-    const winnerName = escapeHtml(match.opponents.find(o => o.opponent.id === game.winner?.id)?.opponent.name || 'Unknown');
+    const team1 = escapeHtml(match.opponents[0]?.opponent?.name || 'TBD');
+    const team2 = escapeHtml(match.opponents[1]?.opponent?.name || 'TBD');
+    const winnerName = escapeHtml(match.opponents.find(o => o.opponent?.id === game.winner?.id)?.opponent?.name || 'Unknown');
     const seriesScore = formatSeriesScore(match);
     const league = escapeHtml(match.league.name);
     const serie = escapeHtml(match.serie.full_name);
@@ -413,8 +415,8 @@ async function processUpcomingMatches(
 }
 
 function formatNewMatchMessage(match: Match, userTimezone: string, opponentKnown: boolean): string {
-    const team1 = escapeHtml(match.opponents[0]?.opponent.name || 'TBD');
-    const team2 = escapeHtml(match.opponents[1]?.opponent.name || 'TBD');
+    const team1 = escapeHtml(match.opponents[0]?.opponent?.name || 'TBD');
+    const team2 = escapeHtml(match.opponents[1]?.opponent?.name || 'TBD');
     const league = escapeHtml(match.league.name);
     const serie = escapeHtml(match.serie.full_name);
 
@@ -443,8 +445,8 @@ function formatNewMatchMessage(match: Match, userTimezone: string, opponentKnown
 }
 
 function formatUpcomingMatchMessage(match: Match, userTimezone = 'UTC'): string {
-    const team1 = escapeHtml(match.opponents[0]?.opponent.name || 'TBD');
-    const team2 = escapeHtml(match.opponents[1]?.opponent.name || 'TBD');
+    const team1 = escapeHtml(match.opponents[0]?.opponent?.name || 'TBD');
+    const team2 = escapeHtml(match.opponents[1]?.opponent?.name || 'TBD');
     const league = escapeHtml(match.league.name);
     const serie = escapeHtml(match.serie.full_name);
 
