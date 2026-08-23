@@ -169,7 +169,7 @@ describe('handleCron', () => {
         expect(mockKv.put).toHaveBeenCalledWith('match_announced_known_500', 'true', { expirationTtl: 2592000 });
     });
 
-    it('should announce that the opponent is not yet known when only one side of the match is set', async () => {
+    it('should announce advancement without mentioning the opponent when only one side of the match is set', async () => {
         const mockAllSubscriptions: TeamSubscription[] = [
             { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
         ];
@@ -204,8 +204,18 @@ describe('handleCron', () => {
 
         expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
             12345,
-            expect.stringContaining('Opponent not yet known'),
+            expect.stringContaining('Team Liquid'),
             { parse_mode: 'HTML' },
+        );
+        expect(mockBot.telegram.sendMessage).not.toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('unknown'),
+            expect.anything(),
+        );
+        expect(mockBot.telegram.sendMessage).not.toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('TBD'),
+            expect.anything(),
         );
         expect(mockKv.put).toHaveBeenCalledWith('match_announced_tbd_501', 'true', { expirationTtl: 2592000 });
     });
@@ -247,7 +257,7 @@ describe('handleCron', () => {
 
         expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
             12345,
-            expect.stringContaining('Opponent not yet known'),
+            expect.stringContaining('advances to the next round'),
             { parse_mode: 'HTML' },
         );
         expect(mockKv.put).toHaveBeenCalledWith('match_announced_tbd_504', 'true', { expirationTtl: 2592000 });
@@ -293,8 +303,18 @@ describe('handleCron', () => {
 
         expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
             12345,
+            expect.stringContaining('Opponent Revealed'),
+            { parse_mode: 'HTML' },
+        );
+        expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
+            12345,
             expect.stringContaining('Team Liquid vs Team Aster'),
             { parse_mode: 'HTML' },
+        );
+        expect(mockBot.telegram.sendMessage).not.toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('New Match Scheduled'),
+            expect.anything(),
         );
         expect(mockKv.put).toHaveBeenCalledWith('match_announced_known_502', 'true', { expirationTtl: 2592000 });
     });

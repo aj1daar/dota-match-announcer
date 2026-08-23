@@ -339,32 +339,56 @@ async function announceNewMatch(
     maps: SubscriberMaps,
 ): Promise<void> {
     const opponentKnown = isOpponentKnown(match);
-    /*
-     * Two separate keys, not one: a match is often seen first with a TBD
-     * opponent (bracket slot waiting on another series) and later updated once
-     * the opponent resolves. We want to announce both the "you advanced, next
-     * opponent TBD" moment and the follow-up "opponent confirmed" moment, so
-     * each state gets its own one-time notification instead of one dedup key
-     * that would swallow the second announcement.
-     */
-    const kvKey = opponentKnown ? `match_announced_known_${match.id}` : `match_announced_tbd_${match.id}`;
-    const alreadyNotified = await env.NOTIFICATIONS_KV.get(kvKey);
+    const knownKey = `match_announced_known_${match.id}`;
+    const tbdKey = `match_announced_tbd_${match.id}`;
+
+    if (!opponentKnown) {
+        const alreadyNotified = await env.NOTIFICATIONS_KV.get(tbdKey);
+        if (alreadyNotified) return;
+
+        await sendToMatchRecipients(env, bot, match, maps, () => formatAdvancingMessage(match));
+
+        await env.NOTIFICATIONS_KV.put(tbdKey, 'true', { expirationTtl: 2592000 });
+        console.log(`[upcoming] Announced advancement for match ${match.id} (opponent not yet known)`);
+        return;
+    }
+
+    const alreadyNotified = await env.NOTIFICATIONS_KV.get(knownKey);
     if (alreadyNotified) return;
 
+    /*
+     * If we already told subscribers their team advanced while the opponent was
+     * still TBD, this is the follow-up reveal, not a brand new match - the two
+     * deserve different framing rather than one dedup key swallowing the second.
+     */
+    const wasPreviouslyTbd = !!(await env.NOTIFICATIONS_KV.get(tbdKey));
+    const title = wasPreviouslyTbd ? '🎭 <b>Opponent Revealed!</b>' : '📢 <b>New Match Scheduled!</b>';
+    await sendToMatchRecipients(env, bot, match, maps, (userTimezone) =>
+        formatMatchAnnouncement(match, userTimezone, title),
+    );
+
+    await env.NOTIFICATIONS_KV.put(knownKey, 'true', { expirationTtl: 2592000 });
+    console.log(`[upcoming] Announced match ${match.id} (revealed: ${wasPreviouslyTbd})`);
+}
+
+async function sendToMatchRecipients(
+    env: Env,
+    bot: Telegraf,
+    match: Match,
+    maps: SubscriberMaps,
+    buildMessage: (userTimezone: string) => string,
+): Promise<void> {
     const telegramIds = getTelegramIdsForMatch(match, maps);
     for (const telegramId of telegramIds) {
         try {
             const subscriber = maps.allSubscribers.find(s => s.telegramId === telegramId);
             const userTimezone = subscriber?.timezone || 'UTC';
-            const message = formatNewMatchMessage(match, userTimezone, opponentKnown);
+            const message = buildMessage(userTimezone);
             await bot.telegram.sendMessage(telegramId, message, { parse_mode: 'HTML' });
         } catch (e) {
             console.error(`[upcoming] Failed to send new-match announcement to ${telegramId}:`, e);
         }
     }
-
-    await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 2592000 });
-    console.log(`[upcoming] Announced new match ${match.id} (opponent known: ${opponentKnown})`);
 }
 
 async function announceMatchStartingSoon(
@@ -414,20 +438,26 @@ async function processUpcomingMatches(
     }
 }
 
-function formatNewMatchMessage(match: Match, userTimezone: string, opponentKnown: boolean): string {
+function formatAdvancingMessage(match: Match): string {
+    const knownTeamName = escapeHtml(
+        match.opponents.find(o => o.opponent)?.opponent?.name || 'Your team',
+    );
+    const league = escapeHtml(match.league.name);
+    const serie = escapeHtml(match.serie.full_name);
+
+    return `\
+📢 <b>Next Match Locked In!</b>
+
+<b>${knownTeamName}</b> advances to the next round!
+
+🏆 ${league} - ${serie}`;
+}
+
+function formatMatchAnnouncement(match: Match, userTimezone: string, title: string): string {
     const team1 = escapeHtml(match.opponents[0]?.opponent?.name || 'TBD');
     const team2 = escapeHtml(match.opponents[1]?.opponent?.name || 'TBD');
     const league = escapeHtml(match.league.name);
     const serie = escapeHtml(match.serie.full_name);
-
-    if (!opponentKnown) {
-        return `\
-📢 <b>Next Match Locked In!</b>
-
-<b>${team1}</b> vs <b>${team2}</b>
-❓ Opponent not yet known - we'll update you as soon as it's confirmed.
-🏆 ${league} - ${serie}`;
-    }
 
     const matchDate = new Date(match.begin_at);
     const formattedTime = formatMatchTime(match.begin_at, userTimezone);
@@ -437,7 +467,7 @@ function formatNewMatchMessage(match: Match, userTimezone: string, opponentKnown
         : '';
 
     return `\
-📢 <b>New Match Scheduled!</b>
+${title}
 
 <b>${team1} vs ${team2}</b>
 🗓️ ${formattedTime} ${tzAbbr}${boInfo}
