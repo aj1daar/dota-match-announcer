@@ -50,7 +50,7 @@ describe('handleCron', () => {
         (getDb as jest.Mock).mockReturnValue(mockDb);
 
         mockBot = new (Telegraf as unknown as jest.Mock<Telegraf>)() as jest.Mocked<Telegraf>;
-        mockBot.telegram = { sendMessage: jest.fn() } as any;
+        mockBot.telegram = { sendMessage: jest.fn(), sendDocument: jest.fn() } as any;
         (Telegraf as unknown as jest.Mock).mockImplementation(() => mockBot);
 
         mockEnv = {
@@ -87,7 +87,7 @@ describe('handleCron', () => {
             {
                 id: 1,
                 name: 'Match 1',
-                begin_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+                begin_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
                 end_at: null,
                 status: 'not_started',
                 winner: null,
@@ -118,6 +118,52 @@ describe('handleCron', () => {
             { parse_mode: 'HTML' },
         );
         expect(mockKv.put).toHaveBeenCalledWith('match_1', 'true', { expirationTtl: 86400 });
+    });
+
+    it('should not attach a calendar file to the starting-soon reminder on its own', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const matches: Match[] = [
+            {
+                id: 2,
+                name: 'Match 2',
+                begin_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+                end_at: null,
+                status: 'not_started',
+                winner: null,
+                games: [],
+                opponents: [
+                    { opponent: { id: 10, name: 'Team A', acronym: null, image_url: null }, type: 'Team' },
+                    { opponent: { id: 11, name: 'Team B', acronym: null, image_url: null }, type: 'Team' },
+                ],
+                league: { name: 'League 1', image_url: null },
+                serie: { full_name: 'Serie 1' },
+                results: [],
+                streams_list: [],
+            },
+        ];
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getUpcomingMatches.mockResolvedValue(matches);
+        (mockKv.get as jest.Mock).mockImplementation((key: string) => {
+            // Already announced as a new match earlier - only the reminder should fire now.
+            if (key === 'match_announced_known_2') return Promise.resolve('true');
+            return Promise.resolve(null);
+        });
+
+        await handleCron(mockEnv, UPCOMING_CRON);
+
+        expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('Upcoming Dota 2 Match!'),
+            { parse_mode: 'HTML' },
+        );
+        expect(mockBot.telegram.sendDocument).not.toHaveBeenCalled();
     });
 
     // --- "As soon as it's known" new-match announcement ---
@@ -167,6 +213,14 @@ describe('handleCron', () => {
             { parse_mode: 'HTML' },
         );
         expect(mockKv.put).toHaveBeenCalledWith('match_announced_known_500', 'true', { expirationTtl: 2592000 });
+
+        expect(mockBot.telegram.sendDocument).toHaveBeenCalledTimes(1);
+        const [chatId, document] = (mockBot.telegram.sendDocument as jest.Mock).mock.calls[0];
+        expect(chatId).toEqual(12345);
+        expect(document.filename).toEqual('match-500.ics');
+        const ics = (document.source as Buffer).toString('utf-8');
+        expect(ics).toContain('BEGIN:VCALENDAR');
+        expect(ics).toContain('SUMMARY:Team Liquid vs Team Secret - ESL One');
     });
 
     it('should announce advancement without mentioning the opponent when only one side of the match is set', async () => {
@@ -218,6 +272,13 @@ describe('handleCron', () => {
             expect.anything(),
         );
         expect(mockKv.put).toHaveBeenCalledWith('match_announced_tbd_501', 'true', { expirationTtl: 2592000 });
+
+        expect(mockBot.telegram.sendDocument).toHaveBeenCalledTimes(1);
+        const [, document] = (mockBot.telegram.sendDocument as jest.Mock).mock.calls[0];
+        const ics = (document.source as Buffer).toString('utf-8');
+        expect(ics).toContain('SUMMARY:Team Liquid - Next Match (ESL One)');
+        expect(ics).not.toContain('unknown');
+        expect(ics).not.toContain('TBD');
     });
 
     it('should not crash when a TBD slot is a present opponents entry with a null opponent', async () => {
@@ -400,7 +461,7 @@ describe('handleCron', () => {
         expect(mockKv.put).not.toHaveBeenCalled();
     });
 
-    it('should not send the starting-soon reminder for matches more than 30 minutes away (new-match announcement still fires)', async () => {
+    it('should not send the starting-soon reminder for matches more than 10 minutes away (new-match announcement still fires)', async () => {
         const mockAllSubscriptions: TeamSubscription[] = [
             { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
         ];
@@ -411,7 +472,7 @@ describe('handleCron', () => {
             {
                 id: 1,
                 name: 'Match 1',
-                begin_at: new Date(Date.now() + 31 * 60 * 1000).toISOString(),
+                begin_at: new Date(Date.now() + 11 * 60 * 1000).toISOString(),
                 games: [],
                 opponents: [
                     { opponent: { id: 10, name: 'Team A', acronym: null, image_url: null }, type: 'Team' },

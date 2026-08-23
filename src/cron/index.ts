@@ -5,6 +5,7 @@ import { Subscriber } from '../db/utils';
 import { Telegraf } from 'telegraf';
 import { formatMatchTime, getTimezoneAbbreviation } from '../utils/timezone';
 import { escapeHtml } from '../utils/html';
+import { buildIcsCalendar } from '../utils/ics';
 
 interface SubscriberMaps {
     teamIdToSubscriberIds: Map<number, Set<number>>;
@@ -371,6 +372,32 @@ async function announceNewMatch(
     console.log(`[upcoming] Announced match ${match.id} (revealed: ${wasPreviouslyTbd})`);
 }
 
+function buildMatchCalendarFile(match: Match): { source: Buffer; filename: string } | null {
+    const start = new Date(match.begin_at);
+    if (isNaN(start.getTime())) return null;
+
+    const opponentKnown = isOpponentKnown(match);
+    const team1 = match.opponents[0]?.opponent?.name;
+    const team2 = match.opponents[1]?.opponent?.name;
+    const summary = opponentKnown
+        ? `${team1} vs ${team2} - ${match.league.name}`
+        : `${team1 || team2 || 'Your team'} - Next Match (${match.league.name})`;
+    const description = match.number_of_games
+        ? `${match.serie.full_name} - Best of ${match.number_of_games}`
+        : match.serie.full_name;
+    const durationMinutes = match.number_of_games ? match.number_of_games * 60 : 120;
+
+    const ics = buildIcsCalendar({
+        uid: `dota-match-${match.id}@dota-match-announcer`,
+        summary,
+        description,
+        start,
+        durationMinutes,
+    });
+
+    return { source: Buffer.from(ics, 'utf-8'), filename: `match-${match.id}.ics` };
+}
+
 async function sendToMatchRecipients(
     env: Env,
     bot: Telegraf,
@@ -379,6 +406,8 @@ async function sendToMatchRecipients(
     buildMessage: (userTimezone: string) => string,
 ): Promise<void> {
     const telegramIds = getTelegramIdsForMatch(match, maps);
+    const calendarFile = buildMatchCalendarFile(match);
+
     for (const telegramId of telegramIds) {
         try {
             const subscriber = maps.allSubscribers.find(s => s.telegramId === telegramId);
@@ -387,6 +416,17 @@ async function sendToMatchRecipients(
             await bot.telegram.sendMessage(telegramId, message, { parse_mode: 'HTML' });
         } catch (e) {
             console.error(`[upcoming] Failed to send new-match announcement to ${telegramId}:`, e);
+        }
+
+        if (calendarFile) {
+            try {
+                await bot.telegram.sendDocument(telegramId, {
+                    source: calendarFile.source,
+                    filename: calendarFile.filename,
+                });
+            } catch (e) {
+                console.error(`[upcoming] Failed to send calendar file to ${telegramId}:`, e);
+            }
         }
     }
 }
@@ -404,7 +444,7 @@ async function announceMatchStartingSoon(
     const matchTime = new Date(match.begin_at).getTime();
     const timeUntilMatch = matchTime - Date.now();
 
-    if (timeUntilMatch > 0 && timeUntilMatch <= 1800000) {
+    if (timeUntilMatch > 0 && timeUntilMatch <= 600000) {
         const telegramIds = getTelegramIdsForMatch(match, maps);
 
         for (const telegramId of telegramIds) {
