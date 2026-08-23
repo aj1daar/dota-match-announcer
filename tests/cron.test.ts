@@ -81,6 +81,7 @@ describe('handleCron', () => {
                 begin_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
                 end_at: null,
                 status: 'not_started',
+                winner: null,
                 games: [],
                 opponents: [
                     { opponent: { id: 10, name: 'Team A', acronym: null, image_url: null }, type: 'Team' },
@@ -126,7 +127,7 @@ describe('handleCron', () => {
                 opponents: [{ opponent: { id: 10, name: 'Team A', acronym: null, image_url: null }, type: 'Team' }],
                 league: { name: 'League 1', image_url: null },
                 serie: { full_name: 'Serie 1' },
-            } as Match,
+            } as unknown as Match,
         ];
 
         (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
@@ -159,7 +160,7 @@ describe('handleCron', () => {
                 opponents: [{ opponent: { id: 10, name: 'Team A', acronym: null, image_url: null }, type: 'Team' }],
                 league: { name: 'League 1', image_url: null },
                 serie: { full_name: 'Serie 1' },
-            } as Match,
+            } as unknown as Match,
         ];
 
         (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);

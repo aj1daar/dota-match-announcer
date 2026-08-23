@@ -53,6 +53,7 @@ describe('teamScheduleCallback', () => {
                 status: 'not_started',
                 begin_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
                 end_at: null,
+                winner: null,
                 number_of_games: 3,
                 games: [],
                 opponents: [
@@ -107,6 +108,7 @@ describe('teamScheduleCallback', () => {
             status: 'not_started' as const,
             begin_at: new Date(Date.now() + (i + 1) * 60 * 60 * 1000).toISOString(),
             end_at: null,
+            winner: null,
             games: [],
             opponents: [
                 { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' as const },
@@ -128,7 +130,7 @@ describe('teamScheduleCallback', () => {
 
     it('should return an error if callback data is invalid', async () => {
         const from = mockCtx.from ?? { id: 12345, is_bot: false, first_name: 'Test' };
-        mockCtx.callbackQuery = { data: 'team_schedule', id: 'cbq1', from, chat_instance: 'ci1' } as any;
+        (mockCtx as any).callbackQuery = { data: 'team_schedule', id: 'cbq1', from, chat_instance: 'ci1' };
 
         await teamScheduleCallback(mockCtx as CustomContext);
 
@@ -147,6 +149,7 @@ describe('teamScheduleCallback', () => {
                 status: 'not_started',
                 begin_at: '2025-01-15T18:00:00Z',
                 end_at: null,
+                winner: null,
                 games: [],
                 opponents: [
                     { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
