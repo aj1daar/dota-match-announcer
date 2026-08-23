@@ -3,12 +3,19 @@ import { Env } from '../src';
 
 describe('PandaScoreClient', () => {
     let client: PandaScoreClient;
-    const mockEnv = {
-        PANDASCORE_TOKEN: 'test-token',
-    } as Env;
+    let mockKv: { get: jest.Mock; put: jest.Mock };
+    let mockEnv: Env;
 
     beforeEach(() => {
         fetchMock.resetMocks();
+        mockKv = {
+            get: jest.fn().mockResolvedValue(null),
+            put: jest.fn().mockResolvedValue(undefined),
+        };
+        mockEnv = {
+            PANDASCORE_TOKEN: 'test-token',
+            NOTIFICATIONS_KV: mockKv,
+        } as unknown as Env;
         client = new PandaScoreClient(mockEnv);
     });
 
@@ -61,6 +68,55 @@ describe('PandaScoreClient', () => {
             fetchMock.mockResponseOnce('Not Found', { status: 404 });
             await expect(client.searchTeams('Test')).rejects.toThrow(
                 'PandaScore API error: 404 Not Found',
+            );
+        });
+
+        it('should cache the fetched team list in KV after a cache miss', async () => {
+            const allTeams: Team[] = [
+                { id: 1, name: 'Test Team 1', acronym: 'TT1', image_url: null },
+            ];
+            fetchMock.mockResponseOnce(JSON.stringify(allTeams));
+            fetchMock.mockResponseOnce(JSON.stringify([]));
+
+            await client.searchTeams('Test');
+
+            expect(mockKv.get).toHaveBeenCalledWith('pandascore_teams_cache');
+            expect(mockKv.put).toHaveBeenCalledWith(
+                'pandascore_teams_cache',
+                JSON.stringify(allTeams),
+                { expirationTtl: 3600 },
+            );
+        });
+
+        it('should use the cached team list and skip the API when the cache is warm', async () => {
+            const cachedTeams: Team[] = [
+                { id: 1, name: 'Cached Team', acronym: 'CT', image_url: null },
+                { id: 2, name: 'Other Team', acronym: 'OT', image_url: null },
+            ];
+            mockKv.get.mockResolvedValue(JSON.stringify(cachedTeams));
+
+            const teams = await client.searchTeams('Cached');
+
+            expect(teams).toEqual([cachedTeams[0]]);
+            expect(fetchMock.mock.calls.length).toEqual(0);
+            expect(mockKv.put).not.toHaveBeenCalled();
+        });
+
+        it('should refetch from the API if the cached value is corrupted', async () => {
+            mockKv.get.mockResolvedValue('not valid json');
+            const allTeams: Team[] = [
+                { id: 1, name: 'Test Team 1', acronym: 'TT1', image_url: null },
+            ];
+            fetchMock.mockResponseOnce(JSON.stringify(allTeams));
+            fetchMock.mockResponseOnce(JSON.stringify([]));
+
+            const teams = await client.searchTeams('Test');
+
+            expect(teams).toEqual(allTeams);
+            expect(mockKv.put).toHaveBeenCalledWith(
+                'pandascore_teams_cache',
+                JSON.stringify(allTeams),
+                { expirationTtl: 3600 },
             );
         });
     });

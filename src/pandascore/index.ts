@@ -90,13 +90,18 @@ export interface GroupStanding {
 
 export type TournamentStanding = BracketStanding | GroupStanding;
 
+const TEAMS_CACHE_KEY = 'pandascore_teams_cache';
+const TEAMS_CACHE_TTL_SECONDS = 3600;
+
 export class PandaScoreClient {
     private readonly apiRoot: string = 'https://api.pandascore.co';
     private readonly baseUrl: string = 'https://api.pandascore.co/dota2';
     private readonly token: string;
+    private readonly kv: KVNamespace;
 
     constructor(env: Env) {
         this.token = env.PANDASCORE_TOKEN;
+        this.kv = env.NOTIFICATIONS_KV;
         if (!this.token) {
             console.error('PANDASCORE_TOKEN is not configured');
         }
@@ -147,13 +152,7 @@ export class PandaScoreClient {
         return this.fetchJson<T>(new URL(`${this.apiRoot}${endpoint}`), params);
     }
 
-    async searchTeams(name: string): Promise<Team[]> {
-        console.log(`[PandaScore] Searching for teams with query: "${name}"`);
-
-        /*
-         * Fetch all teams with pagination
-         * PandaScore's search parameter doesn't work reliably, so we implement client-side filtering
-         */
+    private async fetchAllTeams(): Promise<Team[]> {
         const allTeams: Team[] = [];
         const pageSize = 50;
         let page = 1;
@@ -177,6 +176,33 @@ export class PandaScoreClient {
         }
 
         console.log(`[PandaScore] Fetched ${allTeams.length} total teams`);
+        return allTeams;
+    }
+
+    private async getAllTeamsCached(): Promise<Team[]> {
+        const cached = await this.kv.get(TEAMS_CACHE_KEY);
+        if (cached) {
+            try {
+                console.log('[PandaScore] Using cached team list');
+                return JSON.parse(cached) as Team[];
+            } catch (e) {
+                console.error('[PandaScore] Failed to parse cached team list, refetching:', e);
+            }
+        }
+
+        const allTeams = await this.fetchAllTeams();
+        await this.kv.put(TEAMS_CACHE_KEY, JSON.stringify(allTeams), { expirationTtl: TEAMS_CACHE_TTL_SECONDS });
+        return allTeams;
+    }
+
+    async searchTeams(name: string): Promise<Team[]> {
+        console.log(`[PandaScore] Searching for teams with query: "${name}"`);
+
+        /*
+         * PandaScore's search parameter doesn't work reliably, so we fetch the
+         * full team list (cached in KV) and filter client-side instead.
+         */
+        const allTeams = await this.getAllTeamsCached();
 
         const lowerName = name.toLowerCase();
         const matchingTeams = allTeams.filter(team => {
