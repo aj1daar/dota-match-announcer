@@ -200,6 +200,10 @@ async function announceTournamentResults(
      * triggered this call. A team eliminated earlier in the tournament (e.g. in
      * the group stage) never has a last_match that lines up with whatever match
      * just finished, so it can only ever be resolved via the tournament-ended check.
+     * That same tournament-ended check also acts as a safety net for a team whose
+     * own elimination match was somehow missed (cron downtime, API lag): it isn't
+     * tied to !lastMatch, so once the tournament is over, everyone still
+     * unresolved gets picked up here instead of staying invisible forever.
      */
     for (const entry of standings) {
         const teamId = entry.team.id;
@@ -216,12 +220,7 @@ async function announceTournamentResults(
             !!lastMatch &&
             lastMatch.id === match.id &&
             lastMatch.winner_id !== teamId;
-        /*
-         * No last_match at all (pure round-robin) or a null one (eliminated
-         * before ever reaching the bracket) both mean there's no per-match
-         * signal to key off of - the tournament's own end date is all we have.
-         */
-        const isFinalByTournamentEnd = tournamentEnded && !lastMatch;
+        const isFinalByTournamentEnd = tournamentEnded;
 
         if (!isChampion && !isBracketElimination && !isFinalByTournamentEnd) continue;
 
