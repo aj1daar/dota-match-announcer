@@ -32,6 +32,15 @@ describe('handleCron', () => {
 
         mockPandaScoreClient = new (PandaScoreClient as jest.Mock<PandaScoreClient>)() as jest.Mocked<PandaScoreClient>;
         (PandaScoreClient as jest.Mock).mockImplementation(() => mockPandaScoreClient);
+        /*
+         * PandaScoreClient is automocked, so its methods live as shared jest.fn()
+         * on the mocked prototype - clearAllMocks() resets call history but NOT
+         * mockResolvedValue, so without this default, a value set by an earlier
+         * test would otherwise leak into every test that doesn't override it.
+         */
+        mockPandaScoreClient.getUpcomingMatches.mockResolvedValue([]);
+        mockPandaScoreClient.getRunningMatches.mockResolvedValue([]);
+        mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([]);
 
         mockDb = {
             getAllSubscriptions: jest.fn(),
@@ -111,6 +120,186 @@ describe('handleCron', () => {
         expect(mockKv.put).toHaveBeenCalledWith('match_1', 'true', { expirationTtl: 86400 });
     });
 
+    // --- "As soon as it's known" new-match announcement ---
+
+    it('should announce a newly seen match with a known opponent right away, regardless of how far off it is', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const matches: Match[] = [
+            {
+                id: 500,
+                name: 'Upper Bracket Final',
+                begin_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+                end_at: null,
+                status: 'not_started',
+                winner: null,
+                games: [],
+                opponents: [
+                    { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
+                    { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
+                ],
+                league: { name: 'ESL One', image_url: null },
+                serie: { full_name: 'Spring 2024' },
+                results: [],
+                streams_list: [],
+            },
+        ];
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getUpcomingMatches.mockResolvedValue(matches);
+        (mockKv.get as jest.Mock).mockResolvedValue(null);
+
+        await handleCron(mockEnv, LIVE_CRON);
+
+        expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('New Match Scheduled'),
+            { parse_mode: 'HTML' },
+        );
+        expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('Team Liquid vs Team Secret'),
+            { parse_mode: 'HTML' },
+        );
+        expect(mockKv.put).toHaveBeenCalledWith('match_announced_known_500', 'true', { expirationTtl: 2592000 });
+    });
+
+    it('should announce that the opponent is not yet known when only one side of the match is set', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const matches: Match[] = [
+            {
+                id: 501,
+                name: 'Lower Bracket Round 3',
+                begin_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+                end_at: null,
+                status: 'not_started',
+                winner: null,
+                games: [],
+                opponents: [
+                    { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
+                ],
+                league: { name: 'ESL One', image_url: null },
+                serie: { full_name: 'Spring 2024' },
+                results: [],
+                streams_list: [],
+            } as unknown as Match,
+        ];
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getUpcomingMatches.mockResolvedValue(matches);
+        (mockKv.get as jest.Mock).mockResolvedValue(null);
+
+        await handleCron(mockEnv, LIVE_CRON);
+
+        expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('Opponent not yet known'),
+            { parse_mode: 'HTML' },
+        );
+        expect(mockKv.put).toHaveBeenCalledWith('match_announced_tbd_501', 'true', { expirationTtl: 2592000 });
+    });
+
+    it('should announce the confirmed opponent once it resolves, even after the TBD announcement already fired', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const matches: Match[] = [
+            {
+                id: 502,
+                name: 'Lower Bracket Round 3',
+                begin_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+                end_at: null,
+                status: 'not_started',
+                winner: null,
+                games: [],
+                opponents: [
+                    { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
+                    { opponent: { id: 30, name: 'Team Aster', acronym: 'Aster', image_url: null }, type: 'Team' },
+                ],
+                league: { name: 'ESL One', image_url: null },
+                serie: { full_name: 'Spring 2024' },
+                results: [],
+                streams_list: [],
+            },
+        ];
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getUpcomingMatches.mockResolvedValue(matches);
+        (mockKv.get as jest.Mock).mockImplementation((key: string) => {
+            // The TBD version of this match was already announced on an earlier tick.
+            if (key === 'match_announced_tbd_502') return Promise.resolve('true');
+            return Promise.resolve(null);
+        });
+
+        await handleCron(mockEnv, LIVE_CRON);
+
+        expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('Team Liquid vs Team Aster'),
+            { parse_mode: 'HTML' },
+        );
+        expect(mockKv.put).toHaveBeenCalledWith('match_announced_known_502', 'true', { expirationTtl: 2592000 });
+    });
+
+    it('should not re-announce a match that was already announced with a known opponent', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const matches: Match[] = [
+            {
+                id: 503,
+                name: 'Lower Bracket Round 3',
+                begin_at: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+                end_at: null,
+                status: 'not_started',
+                winner: null,
+                games: [],
+                opponents: [
+                    { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
+                    { opponent: { id: 30, name: 'Team Aster', acronym: 'Aster', image_url: null }, type: 'Team' },
+                ],
+                league: { name: 'ESL One', image_url: null },
+                serie: { full_name: 'Spring 2024' },
+                results: [],
+                streams_list: [],
+            },
+        ];
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getUpcomingMatches.mockResolvedValue(matches);
+        (mockKv.get as jest.Mock).mockImplementation((key: string) => {
+            if (key === 'match_announced_known_503') return Promise.resolve('true');
+            return Promise.resolve(null);
+        });
+
+        await handleCron(mockEnv, LIVE_CRON);
+
+        expect(mockBot.telegram.sendMessage).not.toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('New Match Scheduled'),
+            expect.anything(),
+        );
+    });
+
     it('should not send notification if upcoming match already notified', async () => {
         const mockAllSubscriptions: TeamSubscription[] = [
             { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
@@ -124,7 +313,10 @@ describe('handleCron', () => {
                 name: 'Match 1',
                 begin_at: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
                 games: [],
-                opponents: [{ opponent: { id: 10, name: 'Team A', acronym: null, image_url: null }, type: 'Team' }],
+                opponents: [
+                    { opponent: { id: 10, name: 'Team A', acronym: null, image_url: null }, type: 'Team' },
+                    { opponent: { id: 11, name: 'Team B', acronym: null, image_url: null }, type: 'Team' },
+                ],
                 league: { name: 'League 1', image_url: null },
                 serie: { full_name: 'Serie 1' },
             } as unknown as Match,
@@ -135,6 +327,7 @@ describe('handleCron', () => {
         mockPandaScoreClient.getUpcomingMatches.mockResolvedValue(matches);
         (mockKv.get as jest.Mock).mockImplementation((key: string) => {
             if (key === 'match_1') return Promise.resolve('true');
+            if (key === 'match_announced_known_1') return Promise.resolve('true');
             return Promise.resolve(null);
         });
 
@@ -144,7 +337,7 @@ describe('handleCron', () => {
         expect(mockKv.put).not.toHaveBeenCalled();
     });
 
-    it('should not send notification for matches more than 30 minutes away', async () => {
+    it('should not send the starting-soon reminder for matches more than 30 minutes away (new-match announcement still fires)', async () => {
         const mockAllSubscriptions: TeamSubscription[] = [
             { id: 1, subscriberId: 1, teamId: 10, teamName: 'Team Liquid', createdAt: new Date().toISOString() },
         ];
@@ -157,7 +350,10 @@ describe('handleCron', () => {
                 name: 'Match 1',
                 begin_at: new Date(Date.now() + 31 * 60 * 1000).toISOString(),
                 games: [],
-                opponents: [{ opponent: { id: 10, name: 'Team A', acronym: null, image_url: null }, type: 'Team' }],
+                opponents: [
+                    { opponent: { id: 10, name: 'Team A', acronym: null, image_url: null }, type: 'Team' },
+                    { opponent: { id: 11, name: 'Team B', acronym: null, image_url: null }, type: 'Team' },
+                ],
                 league: { name: 'League 1', image_url: null },
                 serie: { full_name: 'Serie 1' },
             } as unknown as Match,
@@ -170,8 +366,17 @@ describe('handleCron', () => {
 
         await handleCron(mockEnv, UPCOMING_CRON);
 
-        expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
-        expect(mockKv.put).not.toHaveBeenCalled();
+        expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('New Match Scheduled'),
+            { parse_mode: 'HTML' },
+        );
+        expect(mockBot.telegram.sendMessage).not.toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('Upcoming Dota 2 Match!'),
+            expect.anything(),
+        );
+        expect(mockKv.put).not.toHaveBeenCalledWith('match_1', 'true', expect.anything());
     });
 
     // --- Live match / per-map tests (1-min cron) ---

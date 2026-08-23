@@ -6,8 +6,6 @@ import { Telegraf } from 'telegraf';
 import { formatMatchTime, getTimezoneAbbreviation } from '../utils/timezone';
 import { escapeHtml } from '../utils/html';
 
-const UPCOMING_CRON = '*/15 * * * *';
-
 interface SubscriberMaps {
     teamIdToSubscriberIds: Map<number, Set<number>>;
     subscriberIdToTelegramId: Map<number, number>;
@@ -328,6 +326,77 @@ async function processLiveMatches(
     }
 }
 
+function isOpponentKnown(match: Match): boolean {
+    return match.opponents.length === 2 && !!match.opponents[0]?.opponent && !!match.opponents[1]?.opponent;
+}
+
+async function announceNewMatch(
+    env: Env,
+    bot: Telegraf,
+    match: Match,
+    maps: SubscriberMaps,
+): Promise<void> {
+    const opponentKnown = isOpponentKnown(match);
+    /*
+     * Two separate keys, not one: a match is often seen first with a TBD
+     * opponent (bracket slot waiting on another series) and later updated once
+     * the opponent resolves. We want to announce both the "you advanced, next
+     * opponent TBD" moment and the follow-up "opponent confirmed" moment, so
+     * each state gets its own one-time notification instead of one dedup key
+     * that would swallow the second announcement.
+     */
+    const kvKey = opponentKnown ? `match_announced_known_${match.id}` : `match_announced_tbd_${match.id}`;
+    const alreadyNotified = await env.NOTIFICATIONS_KV.get(kvKey);
+    if (alreadyNotified) return;
+
+    const telegramIds = getTelegramIdsForMatch(match, maps);
+    for (const telegramId of telegramIds) {
+        try {
+            const subscriber = maps.allSubscribers.find(s => s.telegramId === telegramId);
+            const userTimezone = subscriber?.timezone || 'UTC';
+            const message = formatNewMatchMessage(match, userTimezone, opponentKnown);
+            await bot.telegram.sendMessage(telegramId, message, { parse_mode: 'HTML' });
+        } catch (e) {
+            console.error(`[upcoming] Failed to send new-match announcement to ${telegramId}:`, e);
+        }
+    }
+
+    await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 2592000 });
+    console.log(`[upcoming] Announced new match ${match.id} (opponent known: ${opponentKnown})`);
+}
+
+async function announceMatchStartingSoon(
+    env: Env,
+    bot: Telegraf,
+    match: Match,
+    maps: SubscriberMaps,
+): Promise<void> {
+    const notificationKey = `match_${match.id}`;
+    const notified = await env.NOTIFICATIONS_KV.get(notificationKey);
+    if (notified) return;
+
+    const matchTime = new Date(match.begin_at).getTime();
+    const timeUntilMatch = matchTime - Date.now();
+
+    if (timeUntilMatch > 0 && timeUntilMatch <= 1800000) {
+        const telegramIds = getTelegramIdsForMatch(match, maps);
+
+        for (const telegramId of telegramIds) {
+            try {
+                const subscriber = maps.allSubscribers.find(s => s.telegramId === telegramId);
+                const userTimezone = subscriber?.timezone || 'UTC';
+                const message = formatUpcomingMatchMessage(match, userTimezone);
+                await bot.telegram.sendMessage(telegramId, message, { parse_mode: 'HTML' });
+            } catch (e) {
+                console.error(`[upcoming] Failed to send to ${telegramId}:`, e);
+            }
+        }
+
+        await env.NOTIFICATIONS_KV.put(notificationKey, 'true', { expirationTtl: 86400 });
+        console.log(`[upcoming] Notified upcoming match ${match.id}`);
+    }
+}
+
 async function processUpcomingMatches(
     env: Env,
     bot: Telegraf,
@@ -338,31 +407,39 @@ async function processUpcomingMatches(
     console.log(`[upcoming] Found ${matches.length} upcoming matches`);
 
     for (const match of matches) {
-        const notificationKey = `match_${match.id}`;
-        const notified = await env.NOTIFICATIONS_KV.get(notificationKey);
-        if (notified) continue;
-
-        const matchTime = new Date(match.begin_at).getTime();
-        const timeUntilMatch = matchTime - Date.now();
-
-        if (timeUntilMatch > 0 && timeUntilMatch <= 1800000) {
-            const telegramIds = getTelegramIdsForMatch(match, maps);
-
-            for (const telegramId of telegramIds) {
-                try {
-                    const subscriber = maps.allSubscribers.find(s => s.telegramId === telegramId);
-                    const userTimezone = subscriber?.timezone || 'UTC';
-                    const message = formatUpcomingMatchMessage(match, userTimezone);
-                    await bot.telegram.sendMessage(telegramId, message, { parse_mode: 'HTML' });
-                } catch (e) {
-                    console.error(`[upcoming] Failed to send to ${telegramId}:`, e);
-                }
-            }
-
-            await env.NOTIFICATIONS_KV.put(notificationKey, 'true', { expirationTtl: 86400 });
-            console.log(`[upcoming] Notified upcoming match ${match.id}`);
-        }
+        await announceNewMatch(env, bot, match, maps);
+        await announceMatchStartingSoon(env, bot, match, maps);
     }
+}
+
+function formatNewMatchMessage(match: Match, userTimezone: string, opponentKnown: boolean): string {
+    const team1 = escapeHtml(match.opponents[0]?.opponent.name || 'TBD');
+    const team2 = escapeHtml(match.opponents[1]?.opponent.name || 'TBD');
+    const league = escapeHtml(match.league.name);
+    const serie = escapeHtml(match.serie.full_name);
+
+    if (!opponentKnown) {
+        return `\
+📢 <b>Next Match Locked In!</b>
+
+<b>${team1}</b> vs <b>${team2}</b>
+❓ Opponent not yet known - we'll update you as soon as it's confirmed.
+🏆 ${league} - ${serie}`;
+    }
+
+    const matchDate = new Date(match.begin_at);
+    const formattedTime = formatMatchTime(match.begin_at, userTimezone);
+    const tzAbbr = getTimezoneAbbreviation(matchDate, userTimezone);
+    const boInfo = match.number_of_games
+        ? `\n🎮 Best of ${match.number_of_games} (BO${match.number_of_games})`
+        : '';
+
+    return `\
+📢 <b>New Match Scheduled!</b>
+
+<b>${team1} vs ${team2}</b>
+🗓️ ${formattedTime} ${tzAbbr}${boInfo}
+🏆 ${league} - ${serie}`;
 }
 
 function formatUpcomingMatchMessage(match: Match, userTimezone = 'UTC'): string {
@@ -396,12 +473,16 @@ export async function handleCron(env: Env, cron?: string) {
     const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN);
     const pandaScoreClient = new PandaScoreClient(env);
 
-    if (cron === UPCOMING_CRON) {
-        await processUpcomingMatches(env, bot, pandaScoreClient, maps);
-    } else {
-        await processLiveMatches(env, bot, pandaScoreClient, maps);
-        await processFinishedMatches(env, bot, pandaScoreClient, maps);
-    }
+    /*
+     * Run on every trigger (both the 1-minute and 15-minute schedules) so a
+     * newly scheduled match - e.g. the next round after a team advances - gets
+     * announced within a minute of PandaScore publishing it, not up to 15
+     * minutes later. Each sub-step is independently deduped via KV, so running
+     * it more often than strictly necessary on the 15-minute tick is harmless.
+     */
+    await processUpcomingMatches(env, bot, pandaScoreClient, maps);
+    await processLiveMatches(env, bot, pandaScoreClient, maps);
+    await processFinishedMatches(env, bot, pandaScoreClient, maps);
 
     console.log('Cron job finished.');
 }
