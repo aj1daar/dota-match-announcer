@@ -1,5 +1,5 @@
 import { Env } from '../index';
-import { PandaScoreClient, Match, Game } from '../pandascore';
+import { PandaScoreClient, Match, Game, Team, TournamentStanding } from '../pandascore';
 import { getDb } from '../db/utils';
 import { Subscriber } from '../db/utils';
 import { Telegraf } from 'telegraf';
@@ -121,6 +121,91 @@ function formatFinalResultMessage(match: Match): string {
 🏆 ${league} - ${serie}`;
 }
 
+function formatTournamentResultMessage(
+    teamName: string,
+    tournamentName: string,
+    isChampion: boolean,
+    rank: number,
+): string {
+    if (isChampion) {
+        return `\
+🏆 <b>Champions!</b>
+
+<b>${teamName}</b> won the tournament!
+
+🎉 ${tournamentName}`;
+    }
+
+    return `\
+🥊 <b>Tournament Result</b>
+
+<b>${teamName}</b> finished in place #${rank}.
+
+🏆 ${tournamentName}`;
+}
+
+async function announceTournamentResults(
+    env: Env,
+    bot: Telegraf,
+    pandaScoreClient: PandaScoreClient,
+    match: Match,
+    maps: SubscriberMaps,
+    standingsCache: Map<number, TournamentStanding[] | null>,
+): Promise<void> {
+    if (!match.tournament_id || !match.tournament) return;
+
+    const subscribedTeams: Team[] = match.opponents
+        .map(o => o.opponent)
+        .filter(team => maps.teamIdToSubscriberIds.has(team.id));
+    if (subscribedTeams.length === 0) return;
+
+    if (!standingsCache.has(match.tournament_id)) {
+        try {
+            const standings = await pandaScoreClient.getTournamentStandings(match.tournament_id);
+            standingsCache.set(match.tournament_id, standings);
+        } catch (e) {
+            console.error(`[tournament] Failed to fetch standings for tournament ${match.tournament_id}:`, e);
+            standingsCache.set(match.tournament_id, null);
+        }
+    }
+    const standings = standingsCache.get(match.tournament_id);
+    if (!standings) return;
+
+    for (const team of subscribedTeams) {
+        const kvKey = `tournament_result_${match.tournament_id}_${team.id}`;
+        const alreadyNotified = await env.NOTIFICATIONS_KV.get(kvKey);
+        if (alreadyNotified) continue;
+
+        const entry = standings.find(s => s.team.id === team.id);
+        if (!entry) continue;
+
+        const isChampion = match.tournament!.winner_id === team.id;
+        const isEliminated =
+            !isChampion &&
+            'last_match' in entry &&
+            entry.last_match?.id === match.id &&
+            match.winner?.id !== team.id;
+
+        if (!isChampion && !isEliminated) continue;
+
+        const tournamentName = match.tournament!.name;
+        const message = formatTournamentResultMessage(team.name, tournamentName, isChampion, entry.rank);
+        const subscriberIds = maps.teamIdToSubscriberIds.get(team.id) || new Set<number>();
+        for (const subId of subscriberIds) {
+            const telegramId = maps.subscriberIdToTelegramId.get(subId);
+            if (!telegramId) continue;
+            try {
+                await bot.telegram.sendMessage(telegramId, message, { parse_mode: 'HTML' });
+            } catch (e) {
+                console.error(`[tournament] Failed to send result to ${telegramId}:`, e);
+            }
+        }
+
+        await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 2592000 });
+        console.log(`[tournament] Notified result for team ${team.id} in tournament ${match.tournament_id}`);
+    }
+}
+
 async function processFinishedMatches(
     env: Env,
     bot: Telegraf,
@@ -129,6 +214,7 @@ async function processFinishedMatches(
 ): Promise<void> {
     const finishedMatches = await pandaScoreClient.getRecentlyFinishedMatches(maps.uniqueTeamIds);
     console.log(`[finished] Found ${finishedMatches.length} recently finished matches`);
+    const standingsCache = new Map<number, TournamentStanding[] | null>();
 
     for (let match of finishedMatches) {
         const kvKey = `match_final_${match.id}`;
@@ -161,6 +247,8 @@ async function processFinishedMatches(
 
         await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 86400 });
         console.log(`[finished] Notified final result for match ${match.id}`);
+
+        await announceTournamentResults(env, bot, pandaScoreClient, match, maps, standingsCache);
     }
 }
 
