@@ -1,6 +1,7 @@
 import { CustomContext } from '../context';
 import { getDb } from '../../db/utils';
 import { isDataCallbackQuery } from '../utils';
+import { escapeHtml } from '../../utils/html';
 
 export const subscribeTeamCallback = async (ctx: CustomContext) => {
     if (!ctx.callbackQuery || !isDataCallbackQuery(ctx.callbackQuery)) {
@@ -42,7 +43,7 @@ export const subscribeTeamCallback = async (ctx: CustomContext) => {
         await ctx.answerCbQuery(`Subscribed to ${teamName}!`);
         await ctx.editMessageText(`You are now subscribed to ${teamName}.`).catch((e) => {
             console.error('[subscribe] editMessageText failed, falling back to reply:', e);
-            return ctx.reply(`You are now subscribed to <b>${teamName}</b>!`, { parse_mode: 'HTML' }).catch(console.error);
+            return ctx.reply(`You are now subscribed to <b>${escapeHtml(teamName)}</b>!`, { parse_mode: 'HTML' }).catch(console.error);
         });
     } catch (error: any) {
         console.error('Error subscribing to team:', error);

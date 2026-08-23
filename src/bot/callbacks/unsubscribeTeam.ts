@@ -1,6 +1,7 @@
 import { CustomContext } from '../context';
 import { getDb } from '../../db/utils';
 import { isDataCallbackQuery } from '../utils';
+import { escapeHtml } from '../../utils/html';
 
 export const unsubscribeTeamCallback = async (ctx: CustomContext) => {
     if (!ctx.callbackQuery || !isDataCallbackQuery(ctx.callbackQuery)) {
@@ -37,7 +38,7 @@ export const unsubscribeTeamCallback = async (ctx: CustomContext) => {
             `You have successfully unsubscribed from ${teamName}.`,
         ).catch((e) => {
             console.error('[unsubscribe] editMessageText failed, falling back to reply:', e);
-            return ctx.reply(`Unsubscribed from <b>${teamName}</b>.`, { parse_mode: 'HTML' }).catch(console.error);
+            return ctx.reply(`Unsubscribed from <b>${escapeHtml(teamName)}</b>.`, { parse_mode: 'HTML' }).catch(console.error);
         });
     } catch (error) {
         console.error('Error unsubscribing from team:', error);

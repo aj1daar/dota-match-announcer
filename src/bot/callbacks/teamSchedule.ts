@@ -3,6 +3,7 @@ import { isDataCallbackQuery } from '../utils';
 import { PandaScoreClient } from '../../pandascore';
 import { getDb } from '../../db/utils';
 import { formatMatchTime, getTimezoneAbbreviation } from '../../utils/timezone';
+import { escapeHtml } from '../../utils/html';
 
 const MAX_SCHEDULE_MATCHES = 5;
 
@@ -34,16 +35,18 @@ export const teamScheduleCallback = async (ctx: CustomContext) => {
         const pandaScoreClient = new PandaScoreClient(ctx.env);
         const matches = await pandaScoreClient.getUpcomingMatches([teamId]);
 
+        const escapedTeamName = escapeHtml(teamName);
+
         if (matches.length === 0) {
-            return ctx.reply(`No upcoming matches found for <b>${teamName}</b>.`, { parse_mode: 'HTML' });
+            return ctx.reply(`No upcoming matches found for <b>${escapedTeamName}</b>.`, { parse_mode: 'HTML' });
         }
 
         const upcoming = matches.slice(0, MAX_SCHEDULE_MATCHES);
-        const lines: string[] = [`📅 <b>Upcoming matches for ${teamName}:</b>`];
+        const lines: string[] = [`📅 <b>Upcoming matches for ${escapedTeamName}:</b>`];
 
         for (const match of upcoming) {
-            const opp1 = match.opponents[0]?.opponent.name || 'TBD';
-            const opp2 = match.opponents[1]?.opponent.name || 'TBD';
+            const opp1 = escapeHtml(match.opponents[0]?.opponent.name || 'TBD');
+            const opp2 = escapeHtml(match.opponents[1]?.opponent.name || 'TBD');
             const matchDate = new Date(match.begin_at);
             const formattedTime = formatMatchTime(match.begin_at, userTimezone);
             const tzAbbr = getTimezoneAbbreviation(matchDate, userTimezone);
@@ -52,7 +55,7 @@ export const teamScheduleCallback = async (ctx: CustomContext) => {
             lines.push(
                 `\n<b>${opp1} vs ${opp2}</b>\n` +
                 `🗓 ${formattedTime} ${tzAbbr}${boInfo}\n` +
-                `🏆 ${match.league.name} - ${match.serie.full_name}`,
+                `🏆 ${escapeHtml(match.league.name)} - ${escapeHtml(match.serie.full_name)}`,
             );
         }
 

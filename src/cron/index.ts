@@ -4,6 +4,7 @@ import { getDb } from '../db/utils';
 import { Subscriber } from '../db/utils';
 import { Telegraf } from 'telegraf';
 import { formatMatchTime, getTimezoneAbbreviation } from '../utils/timezone';
+import { escapeHtml } from '../utils/html';
 
 const UPCOMING_CRON = '*/15 * * * *';
 
@@ -74,16 +75,16 @@ function formatSeriesScore(match: Match): string {
             else if (g.winner.id === team2.id) score2++;
         }
     }
-    return `${team1.name} ${score1} – ${score2} ${team2.name}`;
+    return `${escapeHtml(team1.name)} ${score1} – ${score2} ${escapeHtml(team2.name)}`;
 }
 
 function formatMapResultMessage(match: Match, game: Game): string {
-    const team1 = match.opponents[0]?.opponent.name || 'TBD';
-    const team2 = match.opponents[1]?.opponent.name || 'TBD';
-    const winnerName = match.opponents.find(o => o.opponent.id === game.winner?.id)?.opponent.name || 'Unknown';
+    const team1 = escapeHtml(match.opponents[0]?.opponent.name || 'TBD');
+    const team2 = escapeHtml(match.opponents[1]?.opponent.name || 'TBD');
+    const winnerName = escapeHtml(match.opponents.find(o => o.opponent.id === game.winner?.id)?.opponent.name || 'Unknown');
     const seriesScore = formatSeriesScore(match);
-    const league = match.league.name;
-    const serie = match.serie.full_name;
+    const league = escapeHtml(match.league.name);
+    const serie = escapeHtml(match.serie.full_name);
 
     return `\
 🎮 <b>Map ${game.position} Result</b>
@@ -98,9 +99,9 @@ function formatMapResultMessage(match: Match, game: Game): string {
 function formatFinalResultMessage(match: Match): string {
     const team1 = match.opponents[0]?.opponent;
     const team2 = match.opponents[1]?.opponent;
-    const team1Name = team1?.name || 'TBD';
-    const team2Name = team2?.name || 'TBD';
-    const winnerName = match.winner?.name || 'Unknown';
+    const team1Name = escapeHtml(team1?.name || 'TBD');
+    const team2Name = escapeHtml(team2?.name || 'TBD');
+    const winnerName = escapeHtml(match.winner?.name || 'Unknown');
     let score1 = 0;
     let score2 = 0;
     for (const g of match.games || []) {
@@ -109,8 +110,8 @@ function formatFinalResultMessage(match: Match): string {
             else if (g.winner.id === team2?.id) score2++;
         }
     }
-    const league = match.league.name;
-    const serie = match.serie.full_name;
+    const league = escapeHtml(match.league.name);
+    const serie = escapeHtml(match.serie.full_name);
 
     return `\
 🏁 <b>Match Over</b>
@@ -127,21 +128,24 @@ function formatTournamentResultMessage(
     isChampion: boolean,
     rank: number,
 ): string {
+    const escapedTeamName = escapeHtml(teamName);
+    const escapedTournamentName = escapeHtml(tournamentName);
+
     if (isChampion) {
         return `\
 🏆 <b>Champions!</b>
 
-<b>${teamName}</b> won the tournament!
+<b>${escapedTeamName}</b> won the tournament!
 
-🎉 ${tournamentName}`;
+🎉 ${escapedTournamentName}`;
     }
 
     return `\
 🥊 <b>Tournament Result</b>
 
-<b>${teamName}</b> finished in place #${rank}.
+<b>${escapedTeamName}</b> finished in place #${rank}.
 
-🏆 ${tournamentName}`;
+🏆 ${escapedTournamentName}`;
 }
 
 async function announceTournamentResults(
@@ -327,10 +331,10 @@ async function processUpcomingMatches(
 }
 
 function formatUpcomingMatchMessage(match: Match, userTimezone = 'UTC'): string {
-    const team1 = match.opponents[0]?.opponent.name || 'TBD';
-    const team2 = match.opponents[1]?.opponent.name || 'TBD';
-    const league = match.league.name;
-    const serie = match.serie.full_name;
+    const team1 = escapeHtml(match.opponents[0]?.opponent.name || 'TBD');
+    const team2 = escapeHtml(match.opponents[1]?.opponent.name || 'TBD');
+    const league = escapeHtml(match.league.name);
+    const serie = escapeHtml(match.serie.full_name);
 
     const matchDate = new Date(match.begin_at);
     const formattedTime = formatMatchTime(match.begin_at, userTimezone);
