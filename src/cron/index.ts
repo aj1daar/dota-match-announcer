@@ -148,6 +148,27 @@ function formatTournamentResultMessage(
 🏆 ${escapedTournamentName}`;
 }
 
+async function hasRemainingTournamentMatches(
+    pandaScoreClient: PandaScoreClient,
+    teamId: number,
+    tournamentId: number,
+): Promise<boolean> {
+    try {
+        const [upcoming, running] = await Promise.all([
+            pandaScoreClient.getUpcomingMatches([teamId]),
+            pandaScoreClient.getRunningMatches([teamId]),
+        ]);
+        return [...upcoming, ...running].some(m => m.tournament_id === tournamentId);
+    } catch (e) {
+        console.error(
+            `[tournament] Failed to verify remaining matches for team ${teamId} in tournament ${tournamentId}:`,
+            e,
+        );
+        // Fail safe: if we can't confirm the team is actually done, don't lock in a placement yet.
+        return true;
+    }
+}
+
 async function announceTournamentResults(
     env: Env,
     bot: Telegraf,
@@ -203,6 +224,11 @@ async function announceTournamentResults(
         const isFinalByTournamentEnd = tournamentEnded && !lastMatch;
 
         if (!isChampion && !isBracketElimination && !isFinalByTournamentEnd) continue;
+
+        if (isFinalByTournamentEnd && !isChampion && !isBracketElimination) {
+            const stillScheduled = await hasRemainingTournamentMatches(pandaScoreClient, teamId, tournamentId);
+            if (stillScheduled) continue;
+        }
 
         const message = formatTournamentResultMessage(entry.team.name, tournament.name, isChampion, entry.rank);
         const subscriberIds = maps.teamIdToSubscriberIds.get(teamId) || new Set<number>();
