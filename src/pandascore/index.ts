@@ -29,6 +29,7 @@ export interface Tournament {
   has_bracket: boolean;
   winner_id: number | null;
   winner_type: 'Team' | 'Player' | null;
+  end_at: string | null;
 }
 
 export interface Match {

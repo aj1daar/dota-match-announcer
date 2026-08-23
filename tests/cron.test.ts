@@ -499,7 +499,7 @@ describe('handleCron', () => {
             end_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
             winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
             tournament_id: 99,
-            tournament: { id: 99, name: 'The International', has_bracket: true, winner_id: 10, winner_type: 'Team' },
+            tournament: { id: 99, name: 'The International', has_bracket: true, winner_id: 10, winner_type: 'Team', end_at: null },
             games: [],
             opponents: [
                 { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
@@ -547,7 +547,7 @@ describe('handleCron', () => {
             end_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
             winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
             tournament_id: 99,
-            tournament: { id: 99, name: 'The International', has_bracket: true, winner_id: null, winner_type: null },
+            tournament: { id: 99, name: 'The International', has_bracket: true, winner_id: null, winner_type: null, end_at: null },
             games: [],
             opponents: [
                 { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
@@ -593,7 +593,7 @@ describe('handleCron', () => {
             end_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
             winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
             tournament_id: 99,
-            tournament: { id: 99, name: 'The International', has_bracket: true, winner_id: null, winner_type: null },
+            tournament: { id: 99, name: 'The International', has_bracket: true, winner_id: null, winner_type: null, end_at: null },
             games: [],
             opponents: [
                 { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
@@ -640,7 +640,7 @@ describe('handleCron', () => {
             end_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
             winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
             tournament_id: 99,
-            tournament: { id: 99, name: 'The International', has_bracket: true, winner_id: 10, winner_type: 'Team' },
+            tournament: { id: 99, name: 'The International', has_bracket: true, winner_id: 10, winner_type: 'Team', end_at: null },
             games: [],
             opponents: [
                 { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
@@ -696,7 +696,7 @@ describe('handleCron', () => {
             end_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
             winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
             tournament_id: 99,
-            tournament: { id: 99, name: 'The International', has_bracket: true, winner_id: 10, winner_type: 'Team' },
+            tournament: { id: 99, name: 'The International', has_bracket: true, winner_id: 10, winner_type: 'Team', end_at: null },
             games: [],
             opponents: [
                 { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
@@ -731,6 +731,112 @@ describe('handleCron', () => {
             expect.stringContaining('finished in place #2'),
             { parse_mode: 'HTML' },
         );
+    });
+
+    it('should announce final placement for a concluded round-robin (group-only) tournament', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 20, teamName: 'Team Secret', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const finishedMatch: Match = {
+            id: 305,
+            name: 'Group Stage Match 3',
+            status: 'finished',
+            begin_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+            end_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+            winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
+            tournament_id: 99,
+            tournament: {
+                id: 99,
+                name: 'Group Stage Qualifier',
+                has_bracket: false,
+                winner_id: null,
+                winner_type: null,
+                end_at: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+            },
+            games: [],
+            opponents: [
+                { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
+                { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
+            ],
+            results: [{ score: 2, team_id: 10 }, { score: 0, team_id: 20 }],
+            league: { name: 'ESL One', image_url: null },
+            serie: { full_name: 'Spring 2024' },
+            streams_list: [],
+        };
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getRunningMatches.mockResolvedValue([]);
+        mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([finishedMatch]);
+        mockPandaScoreClient.getTournamentStandings.mockResolvedValue([
+            { rank: 3, team: { id: 20, name: 'Team Secret' }, wins: 2, losses: 4 },
+        ]);
+        (mockKv.get as jest.Mock).mockResolvedValue(null);
+
+        await handleCron(mockEnv, LIVE_CRON);
+
+        expect(mockBot.telegram.sendMessage).toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('finished in place #3'),
+            { parse_mode: 'HTML' },
+        );
+        expect(mockKv.put).toHaveBeenCalledWith('tournament_result_99_20', 'true', { expirationTtl: 2592000 });
+    });
+
+    it('should not announce placement for a round-robin tournament that has not ended yet', async () => {
+        const mockAllSubscriptions: TeamSubscription[] = [
+            { id: 1, subscriberId: 1, teamId: 20, teamName: 'Team Secret', createdAt: new Date().toISOString() },
+        ];
+        const mockAllSubscribers: Subscriber[] = [
+            { id: 1, telegramId: 12345, timezone: 'UTC', createdAt: new Date().toISOString() },
+        ];
+        const finishedMatch: Match = {
+            id: 306,
+            name: 'Group Stage Match 2',
+            status: 'finished',
+            begin_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+            end_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+            winner: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null },
+            tournament_id: 99,
+            tournament: {
+                id: 99,
+                name: 'Group Stage Qualifier',
+                has_bracket: false,
+                winner_id: null,
+                winner_type: null,
+                end_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+            },
+            games: [],
+            opponents: [
+                { opponent: { id: 10, name: 'Team Liquid', acronym: 'TL', image_url: null }, type: 'Team' },
+                { opponent: { id: 20, name: 'Team Secret', acronym: 'Secret', image_url: null }, type: 'Team' },
+            ],
+            results: [{ score: 2, team_id: 10 }, { score: 0, team_id: 20 }],
+            league: { name: 'ESL One', image_url: null },
+            serie: { full_name: 'Spring 2024' },
+            streams_list: [],
+        };
+
+        (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue(mockAllSubscriptions);
+        (mockDb.getAllSubscribers as jest.Mock).mockResolvedValue(mockAllSubscribers);
+        mockPandaScoreClient.getRunningMatches.mockResolvedValue([]);
+        mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([finishedMatch]);
+        mockPandaScoreClient.getTournamentStandings.mockResolvedValue([
+            { rank: 3, team: { id: 20, name: 'Team Secret' }, wins: 1, losses: 2 },
+        ]);
+        (mockKv.get as jest.Mock).mockResolvedValue(null);
+
+        await handleCron(mockEnv, LIVE_CRON);
+
+        expect(mockBot.telegram.sendMessage).not.toHaveBeenCalledWith(
+            12345,
+            expect.stringContaining('Tournament Result'),
+            expect.anything(),
+        );
+        expect(mockKv.put).not.toHaveBeenCalledWith('tournament_result_99_20', 'true', expect.anything());
     });
 
     it('should skip games that are not yet finished', async () => {

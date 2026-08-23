@@ -186,13 +186,20 @@ async function announceTournamentResults(
         if (!entry) continue;
 
         const isChampion = tournament.winner_id === team.id;
-        const isEliminated =
-            !isChampion &&
+        const isBracketElimination =
             'last_match' in entry &&
             entry.last_match?.id === match.id &&
             match.winner?.id !== team.id;
+        /*
+         * Group/round-robin standings have no last_match to key off of, so fall
+         * back to the tournament's own end date to know the placement is final.
+         */
+        const isGroupStageConcluded =
+            !('last_match' in entry) &&
+            !!tournament.end_at &&
+            new Date(tournament.end_at).getTime() <= Date.now();
 
-        if (!isChampion && !isEliminated) continue;
+        if (!isChampion && !isBracketElimination && !isGroupStageConcluded) continue;
 
         const message = formatTournamentResultMessage(team.name, tournament.name, isChampion, entry.rank);
         const subscriberIds = maps.teamIdToSubscriberIds.get(team.id) || new Set<number>();
