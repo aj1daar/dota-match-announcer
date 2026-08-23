@@ -11,17 +11,17 @@ export const subscribeTeamCallback = async (ctx: CustomContext) => {
 
     const callbackData = ctx.callbackQuery.data;
     const parts = callbackData.split(':');
-    if (parts.length !== 3 || parts[0] !== 'subscribe_team') {
+    if (parts.length < 3 || parts[0] !== 'subscribe_team') {
         console.error('Invalid callback data format:', callbackData);
         return ctx.answerCbQuery('Invalid callback data.');
     }
 
     const teamId = parseInt(parts[1], 10);
-    const teamName = parts[2];
+    const teamName = parts.slice(2).join(':');
     const telegramId = ctx.from?.id;
 
-    if (!telegramId) {
-        console.error('No Telegram ID found in context');
+    if (!telegramId || isNaN(teamId)) {
+        console.error('No Telegram ID found in context, or invalid team ID');
         return ctx.answerCbQuery('Could not identify your Telegram ID.');
     }
 

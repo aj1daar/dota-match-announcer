@@ -2,6 +2,20 @@ import { CustomContext } from '../context';
 import { PandaScoreClient, Team } from '../../pandascore';
 import { InlineKeyboardButton } from 'telegraf/types';
 
+// Telegram rejects the whole keyboard if any button's callback_data exceeds this.
+const MAX_CALLBACK_DATA_BYTES = 64;
+
+function buildSubscribeCallbackData(teamId: number, teamName: string): string {
+    const prefix = `subscribe_team:${teamId}:`;
+    const maxNameBytes = MAX_CALLBACK_DATA_BYTES - new TextEncoder().encode(prefix).length;
+
+    let name = teamName;
+    while (new TextEncoder().encode(name).length > maxNameBytes && name.length > 0) {
+        name = name.slice(0, -1);
+    }
+    return `${prefix}${name}`;
+}
+
 export const performTeamSearch = async (ctx: CustomContext, teamName: string) => {
     try {
         console.log(`[performTeamSearch] User ${ctx.from?.id} searching for team: "${teamName}"`);
@@ -19,7 +33,7 @@ export const performTeamSearch = async (ctx: CustomContext, teamName: string) =>
         const keyboardButtons: InlineKeyboardButton[][] = teams.map((team: Team) => [
             {
                 text: team.name,
-                callback_data: `subscribe_team:${team.id}:${team.name}`,
+                callback_data: buildSubscribeCallbackData(team.id, team.name),
             },
         ]);
 

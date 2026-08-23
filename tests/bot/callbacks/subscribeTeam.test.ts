@@ -81,6 +81,27 @@ describe('subscribeTeamCallback', () => {
         );
     });
 
+    it('should subscribe to a team whose name contains a colon', async () => {
+        const subscriber = {
+            id: 1,
+            telegramId: 12345,
+            createdAt: new Date().toISOString(),
+        };
+        (mockDb.getSubscriberByTelegramId as jest.Mock).mockResolvedValue(subscriber);
+
+        const colonMockCtx = {
+            ...mockCtx,
+            callbackQuery: { data: 'subscribe_team:10:Team: Spirit' } as any,
+        } as CustomContext;
+
+        await subscribeTeamCallback(colonMockCtx);
+
+        expect(mockDb.subscribeTeam).toHaveBeenCalledWith(1, 10, 'Team: Spirit');
+        expect(colonMockCtx.answerCbQuery).toHaveBeenCalledWith(
+            'Subscribed to Team: Spirit!',
+        );
+    });
+
     it('should handle invalid callback data', async () => {
         const invalidMockCtx = {
             ...mockCtx,

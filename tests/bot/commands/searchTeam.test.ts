@@ -71,4 +71,31 @@ describe('searchTeamCommand', () => {
         expect(message).toContain('No teams found for "OG"');
         expect(message).toContain('Try searching with a different name');
     });
+
+    it('should preserve a colon in the team name inside callback_data', async () => {
+        const mockTeams: Team[] = [
+            { id: 1, name: 'Team: Spirit', acronym: null, image_url: null },
+        ];
+        mockPandaScoreClient.searchTeams.mockResolvedValue(mockTeams);
+
+        await searchTeamCommand(mockCtx as CustomContext);
+
+        const [, options] = (mockCtx.reply as jest.Mock).mock.calls[0];
+        expect(options.reply_markup.inline_keyboard[0][0].callback_data).toEqual('subscribe_team:1:Team: Spirit');
+    });
+
+    it('should truncate a long team name so callback_data stays within 64 bytes', async () => {
+        const longName = 'A'.repeat(100);
+        const mockTeams: Team[] = [
+            { id: 12345, name: longName, acronym: null, image_url: null },
+        ];
+        mockPandaScoreClient.searchTeams.mockResolvedValue(mockTeams);
+
+        await searchTeamCommand(mockCtx as CustomContext);
+
+        const [, options] = (mockCtx.reply as jest.Mock).mock.calls[0];
+        const callbackData: string = options.reply_markup.inline_keyboard[0][0].callback_data;
+        expect(new TextEncoder().encode(callbackData).length).toBeLessThanOrEqual(64);
+        expect(callbackData.startsWith('subscribe_team:12345:AAA')).toBe(true);
+    });
 });
