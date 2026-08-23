@@ -1,5 +1,5 @@
 import { Env } from '../index';
-import { PandaScoreClient, Match, Game, Team, TournamentStanding } from '../pandascore';
+import { PandaScoreClient, Match, Game, TournamentStanding } from '../pandascore';
 import { getDb } from '../db/utils';
 import { Subscriber } from '../db/utils';
 import { Telegraf } from 'telegraf';
@@ -160,11 +160,6 @@ async function announceTournamentResults(
     const tournament = match.tournament;
     if (!tournamentId || !tournament) return;
 
-    const subscribedTeams: Team[] = match.opponents
-        .map(o => o.opponent)
-        .filter(team => maps.teamIdToSubscriberIds.has(team.id));
-    if (subscribedTeams.length === 0) return;
-
     if (!standingsCache.has(tournamentId)) {
         try {
             const standings = await pandaScoreClient.getTournamentStandings(tournamentId);
@@ -177,32 +172,40 @@ async function announceTournamentResults(
     const standings = standingsCache.get(tournamentId);
     if (!standings) return;
 
-    for (const team of subscribedTeams) {
-        const kvKey = `tournament_result_${tournamentId}_${team.id}`;
+    const tournamentEnded = !!tournament.end_at && new Date(tournament.end_at).getTime() <= Date.now();
+
+    /*
+     * Scan every entry in the standings, not just the two teams in the match that
+     * triggered this call. A team eliminated earlier in the tournament (e.g. in
+     * the group stage) never has a last_match that lines up with whatever match
+     * just finished, so it can only ever be resolved via the tournament-ended check.
+     */
+    for (const entry of standings) {
+        const teamId = entry.team.id;
+        if (!maps.teamIdToSubscriberIds.has(teamId)) continue;
+
+        const kvKey = `tournament_result_${tournamentId}_${teamId}`;
         const alreadyNotified = await env.NOTIFICATIONS_KV.get(kvKey);
         if (alreadyNotified) continue;
 
-        const entry = standings.find(s => s.team.id === team.id);
-        if (!entry) continue;
+        const lastMatch = 'last_match' in entry ? entry.last_match : undefined;
 
-        const isChampion = tournament.winner_id === team.id;
+        const isChampion = tournament.winner_id === teamId;
         const isBracketElimination =
-            'last_match' in entry &&
-            entry.last_match?.id === match.id &&
-            match.winner?.id !== team.id;
+            !!lastMatch &&
+            lastMatch.id === match.id &&
+            lastMatch.winner_id !== teamId;
         /*
-         * Group/round-robin standings have no last_match to key off of, so fall
-         * back to the tournament's own end date to know the placement is final.
+         * No last_match at all (pure round-robin) or a null one (eliminated
+         * before ever reaching the bracket) both mean there's no per-match
+         * signal to key off of - the tournament's own end date is all we have.
          */
-        const isGroupStageConcluded =
-            !('last_match' in entry) &&
-            !!tournament.end_at &&
-            new Date(tournament.end_at).getTime() <= Date.now();
+        const isFinalByTournamentEnd = tournamentEnded && !lastMatch;
 
-        if (!isChampion && !isBracketElimination && !isGroupStageConcluded) continue;
+        if (!isChampion && !isBracketElimination && !isFinalByTournamentEnd) continue;
 
-        const message = formatTournamentResultMessage(team.name, tournament.name, isChampion, entry.rank);
-        const subscriberIds = maps.teamIdToSubscriberIds.get(team.id) || new Set<number>();
+        const message = formatTournamentResultMessage(entry.team.name, tournament.name, isChampion, entry.rank);
+        const subscriberIds = maps.teamIdToSubscriberIds.get(teamId) || new Set<number>();
         for (const subId of subscriberIds) {
             const telegramId = maps.subscriberIdToTelegramId.get(subId);
             if (!telegramId) continue;
@@ -214,7 +217,7 @@ async function announceTournamentResults(
         }
 
         await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 2592000 });
-        console.log(`[tournament] Notified result for team ${team.id} in tournament ${tournamentId}`);
+        console.log(`[tournament] Notified result for team ${teamId} in tournament ${tournamentId}`);
     }
 }
 
