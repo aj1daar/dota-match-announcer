@@ -152,34 +152,36 @@ async function announceTournamentResults(
     maps: SubscriberMaps,
     standingsCache: Map<number, TournamentStanding[] | null>,
 ): Promise<void> {
-    if (!match.tournament_id || !match.tournament) return;
+    const tournamentId = match.tournament_id;
+    const tournament = match.tournament;
+    if (!tournamentId || !tournament) return;
 
     const subscribedTeams: Team[] = match.opponents
         .map(o => o.opponent)
         .filter(team => maps.teamIdToSubscriberIds.has(team.id));
     if (subscribedTeams.length === 0) return;
 
-    if (!standingsCache.has(match.tournament_id)) {
+    if (!standingsCache.has(tournamentId)) {
         try {
-            const standings = await pandaScoreClient.getTournamentStandings(match.tournament_id);
-            standingsCache.set(match.tournament_id, standings);
+            const standings = await pandaScoreClient.getTournamentStandings(tournamentId);
+            standingsCache.set(tournamentId, standings);
         } catch (e) {
-            console.error(`[tournament] Failed to fetch standings for tournament ${match.tournament_id}:`, e);
-            standingsCache.set(match.tournament_id, null);
+            console.error(`[tournament] Failed to fetch standings for tournament ${tournamentId}:`, e);
+            standingsCache.set(tournamentId, null);
         }
     }
-    const standings = standingsCache.get(match.tournament_id);
+    const standings = standingsCache.get(tournamentId);
     if (!standings) return;
 
     for (const team of subscribedTeams) {
-        const kvKey = `tournament_result_${match.tournament_id}_${team.id}`;
+        const kvKey = `tournament_result_${tournamentId}_${team.id}`;
         const alreadyNotified = await env.NOTIFICATIONS_KV.get(kvKey);
         if (alreadyNotified) continue;
 
         const entry = standings.find(s => s.team.id === team.id);
         if (!entry) continue;
 
-        const isChampion = match.tournament!.winner_id === team.id;
+        const isChampion = tournament.winner_id === team.id;
         const isEliminated =
             !isChampion &&
             'last_match' in entry &&
@@ -188,8 +190,7 @@ async function announceTournamentResults(
 
         if (!isChampion && !isEliminated) continue;
 
-        const tournamentName = match.tournament!.name;
-        const message = formatTournamentResultMessage(team.name, tournamentName, isChampion, entry.rank);
+        const message = formatTournamentResultMessage(team.name, tournament.name, isChampion, entry.rank);
         const subscriberIds = maps.teamIdToSubscriberIds.get(team.id) || new Set<number>();
         for (const subId of subscriberIds) {
             const telegramId = maps.subscriberIdToTelegramId.get(subId);
@@ -202,7 +203,7 @@ async function announceTournamentResults(
         }
 
         await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 2592000 });
-        console.log(`[tournament] Notified result for team ${team.id} in tournament ${match.tournament_id}`);
+        console.log(`[tournament] Notified result for team ${team.id} in tournament ${tournamentId}`);
     }
 }
 
