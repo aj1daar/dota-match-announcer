@@ -1,4 +1,4 @@
-import { PandaScoreClient, Team, Match } from '../src/pandascore';
+import { PandaScoreClient, Team, Match, TournamentStanding } from '../src/pandascore';
 import { Env } from '../src';
 
 describe('PandaScoreClient', () => {
@@ -114,6 +114,29 @@ describe('PandaScoreClient', () => {
             fetchMock.mockResponseOnce('Internal Server Error', { status: 500 });
             await expect(client.getUpcomingMatches([1])).rejects.toThrow(
                 'PandaScore API error: 500 Internal Server Error',
+            );
+        });
+    });
+
+    describe('getTournamentStandings', () => {
+        it('should request the generic (non-/dota2) standings endpoint', async () => {
+            const mockStandings: TournamentStanding[] = [
+                { rank: 1, team: { id: 1, name: 'Team One' }, last_match: { id: 10, status: 'finished', winner_id: 1 } },
+                { rank: 2, team: { id: 2, name: 'Team Two' }, last_match: { id: 9, status: 'finished', winner_id: 1 } },
+            ];
+            fetchMock.mockResponseOnce(JSON.stringify(mockStandings));
+
+            const standings = await client.getTournamentStandings(42);
+            expect(standings).toEqual(mockStandings);
+
+            const url = fetchMock.mock.calls[0][0] as string;
+            expect(url).toEqual('https://api.pandascore.co/tournaments/42/standings');
+        });
+
+        it('should throw an error if the API returns a non-200 response', async () => {
+            fetchMock.mockResponseOnce('Not Found', { status: 404 });
+            await expect(client.getTournamentStandings(42)).rejects.toThrow(
+                'PandaScore API error: 404 Not Found',
             );
         });
     });

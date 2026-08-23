@@ -23,6 +23,14 @@ export interface Game {
   end_at: string | null;
 }
 
+export interface Tournament {
+  id: number;
+  name: string;
+  has_bracket: boolean;
+  winner_id: number | null;
+  winner_type: 'Team' | 'Player' | null;
+}
+
 export interface Match {
   id: number;
   begin_at: string;
@@ -38,6 +46,8 @@ export interface Match {
   serie: {
     full_name: string;
   };
+  tournament_id?: number | null;
+  tournament?: Tournament | null;
   opponents: Array<{
     opponent: Team;
     type: 'Team';
@@ -56,7 +66,32 @@ export interface Match {
   }>;
 }
 
+export interface StandingTeam {
+  id: number;
+  name: string;
+}
+
+export interface BracketStanding {
+  rank: number;
+  team: StandingTeam;
+  last_match: {
+    id: number;
+    status: string;
+    winner_id: number | null;
+  } | null;
+}
+
+export interface GroupStanding {
+  rank: number;
+  team: StandingTeam;
+  wins: number;
+  losses: number;
+}
+
+export type TournamentStanding = BracketStanding | GroupStanding;
+
 export class PandaScoreClient {
+    private readonly apiRoot: string = 'https://api.pandascore.co';
     private readonly baseUrl: string = 'https://api.pandascore.co/dota2';
     private readonly token: string;
 
@@ -67,12 +102,7 @@ export class PandaScoreClient {
         }
     }
 
-    private async request<T>(
-        endpoint: string,
-        params?: Record<string, any>,
-    ): Promise<T> {
-        const url = new URL(`${this.baseUrl}${endpoint}`);
-
+    private async fetchJson<T>(url: URL, params?: Record<string, any>): Promise<T> {
         if (params) {
             for (const key in params) {
                 if (Object.prototype.hasOwnProperty.call(params, key)) {
@@ -101,6 +131,20 @@ export class PandaScoreClient {
         }
 
         return response.json() as Promise<T>;
+    }
+
+    private async request<T>(
+        endpoint: string,
+        params?: Record<string, any>,
+    ): Promise<T> {
+        return this.fetchJson<T>(new URL(`${this.baseUrl}${endpoint}`), params);
+    }
+
+    private async requestRoot<T>(
+        endpoint: string,
+        params?: Record<string, any>,
+    ): Promise<T> {
+        return this.fetchJson<T>(new URL(`${this.apiRoot}${endpoint}`), params);
     }
 
     async searchTeams(name: string): Promise<Team[]> {
@@ -186,5 +230,9 @@ export class PandaScoreClient {
 
     async getMatchById(matchId: number): Promise<Match> {
         return this.request<Match>(`/matches/${matchId}`);
+    }
+
+    async getTournamentStandings(tournamentId: number): Promise<TournamentStanding[]> {
+        return this.requestRoot<TournamentStanding[]>(`/tournaments/${tournamentId}/standings`);
     }
 }
