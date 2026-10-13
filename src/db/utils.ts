@@ -15,6 +15,13 @@ export interface TeamSubscription {
   createdAt: string;
 }
 
+export interface SentNotification {
+  key: string;
+  value: string | null;
+}
+
+const nowInSeconds = () => Math.floor(Date.now() / 1000);
+
 export const getDb = (env: Env) => {
     return {
         async createSubscriber(telegramId: number, timezone = 'UTC'): Promise<Subscriber> {
@@ -98,6 +105,62 @@ export const getDb = (env: Env) => {
                 'SELECT * FROM Subscribers',
             ).all<Subscriber>();
             return results;
+        },
+
+        async getActiveNotifications(): Promise<SentNotification[]> {
+            const { results } = await env.D1.prepare(
+                'SELECT key, value FROM SentNotifications WHERE expiresAt > ?',
+            )
+                .bind(nowInSeconds())
+                .all<SentNotification>();
+            return results;
+        },
+
+        /*
+         * Atomically records a notification as sent. Resolves true for exactly
+         * one caller per key (until it expires), no matter how many try at the
+         * same time - the insert either creates the row or changes nothing.
+         */
+        async claimNotification(
+            key: string,
+            ttlSeconds: number,
+            value: string | null = null,
+        ): Promise<boolean> {
+            const now = nowInSeconds();
+            const result = await env.D1.prepare(
+                'INSERT INTO SentNotifications (key, value, expiresAt) VALUES (?, ?, ?) ' +
+                'ON CONFLICT(key) DO UPDATE SET value = excluded.value, expiresAt = excluded.expiresAt ' +
+                'WHERE SentNotifications.expiresAt <= ?',
+            )
+                .bind(key, value, now + ttlSeconds, now)
+                .run();
+            return result.meta.changes === 1;
+        },
+
+        // Compare-and-swap: resolves true only for the caller that still saw expectedValue.
+        async updateNotificationValue(
+            key: string,
+            expectedValue: string | null,
+            value: string,
+        ): Promise<boolean> {
+            const result = await env.D1.prepare(
+                'UPDATE SentNotifications SET value = ? WHERE key = ? AND value IS ?',
+            )
+                .bind(value, key, expectedValue)
+                .run();
+            return result.meta.changes === 1;
+        },
+
+        async releaseNotification(key: string): Promise<void> {
+            await env.D1.prepare('DELETE FROM SentNotifications WHERE key = ?')
+                .bind(key)
+                .run();
+        },
+
+        async deleteExpiredNotifications(): Promise<void> {
+            await env.D1.prepare('DELETE FROM SentNotifications WHERE expiresAt <= ?')
+                .bind(nowInSeconds())
+                .run();
         },
     };
 };

@@ -66,10 +66,11 @@ const serieWithStages = (...stages: Array<[number, string | null]>): Serie => ({
 
 describe('cron notifications', () => {
     let kvStore: Map<string, string>;
+    let sent: Map<string, string | null>;
     let mockKv: { get: jest.Mock; put: jest.Mock };
     let mockEnv: Env;
     let mockPandaScoreClient: jest.Mocked<PandaScoreClient>;
-    let mockDb: { getAllSubscriptions: jest.Mock; getAllSubscribers: jest.Mock };
+    let mockDb: Record<string, jest.Mock>;
     let sendMessage: jest.Mock;
     let sendDocument: jest.Mock;
 
@@ -100,7 +101,7 @@ describe('cron notifications', () => {
         jest.spyOn(console, 'log').mockImplementation(() => undefined);
         jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
-        // Unlike the plain jest.fn() KV in cron.test.ts, this one remembers writes across runs.
+        // KV only holds notifications recorded before the move to D1; nothing writes to it any more.
         kvStore = new Map<string, string>();
         mockKv = {
             get: jest.fn(async (key: string) => kvStore.get(key) ?? null),
@@ -116,7 +117,35 @@ describe('cron notifications', () => {
         mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([]);
         mockPandaScoreClient.getSerieById.mockResolvedValue(serieWithStages([99, '2024-03-10T00:00:00Z']));
 
-        mockDb = { getAllSubscriptions: jest.fn(), getAllSubscribers: jest.fn() };
+        /*
+         * Stands in for the SentNotifications table. Like the real INSERT ... ON
+         * CONFLICT, a claim checks and records in one step with no await in
+         * between, so only one of several simultaneous callers can win.
+         */
+        sent = new Map<string, string | null>();
+        mockDb = {
+            getAllSubscriptions: jest.fn(),
+            getAllSubscribers: jest.fn(),
+            deleteExpiredNotifications: jest.fn(async () => undefined),
+            getActiveNotifications: jest.fn(async () =>
+                Array.from(sent.entries()).map(([key, value]) => ({ key, value })),
+            ),
+            claimNotification: jest.fn(async (key: string, _ttlSeconds: number, value: string | null = null) => {
+                await Promise.resolve();
+                if (sent.has(key)) return false;
+                sent.set(key, value);
+                return true;
+            }),
+            updateNotificationValue: jest.fn(async (key: string, expectedValue: string | null, value: string) => {
+                await Promise.resolve();
+                if (!sent.has(key) || sent.get(key) !== expectedValue) return false;
+                sent.set(key, value);
+                return true;
+            }),
+            releaseNotification: jest.fn(async (key: string) => {
+                sent.delete(key);
+            }),
+        };
         (getDb as jest.Mock).mockReturnValue(mockDb);
 
         sendMessage = jest.fn();
@@ -236,14 +265,12 @@ describe('cron notifications', () => {
             expect(sendDocument).toHaveBeenCalledTimes(documentsAfterFirstRun);
         });
 
-        it('should announce once when PandaScore lists the same match twice, even if KV still reads the key as missing', async () => {
+        it('should announce once when PandaScore lists the same match twice', async () => {
             subscribe([111, 10]);
             const finished = buildMatch({ tournament_id: 99, tournament: stage(99, 'Playoffs', 10) });
             const running = buildMatch({ id: 501, status: 'running', winner: null, games: [game(5011, 1, 10)] });
             mockPandaScoreClient.getRunningMatches.mockResolvedValue([running, running]);
             mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([finished, finished]);
-            // KV caches "not found", so a key written moments ago can still read back as missing.
-            mockKv.get.mockResolvedValue(null);
 
             await handleCron(mockEnv, CRON);
 
@@ -280,12 +307,95 @@ describe('cron notifications', () => {
             mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([buildMatch()]);
             const recordedAtSendTime: boolean[] = [];
             sendMessage.mockImplementation(async () => {
-                recordedAtSendTime.push(kvStore.has('match_final_300'));
+                recordedAtSendTime.push(sent.has('match_final_300'));
             });
 
             await handleCron(mockEnv, CRON);
 
             expect(recordedAtSendTime).toEqual([true, true]);
+        });
+
+        it('should send everything once when cron runs overlap', async () => {
+            subscribe([111, 10], [222, 20]);
+            mockPandaScoreClient.getUpcomingMatches.mockResolvedValue([
+                buildMatch({
+                    id: 500,
+                    status: 'not_started',
+                    winner: null,
+                    games: [],
+                    begin_at: new Date(Date.now() + 5 * MINUTE).toISOString(),
+                    end_at: null,
+                }),
+            ]);
+            mockPandaScoreClient.getRunningMatches.mockResolvedValue([
+                buildMatch({ id: 501, status: 'running', winner: null, games: [game(5011, 1, 10)] }),
+            ]);
+            mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([
+                buildMatch({ id: 502, tournament_id: 99, tournament: stage(99, 'Playoffs', 10) }),
+            ]);
+
+            await Promise.all([handleCron(mockEnv, CRON), handleCron(mockEnv, CRON), handleCron(mockEnv, CRON)]);
+
+            // Every overlapping run loaded an empty log, so only the atomic claim keeps them apart.
+            expect(mockDb.getActiveNotifications).toHaveBeenCalledTimes(3);
+            expect(messagesTo(111).map(m => m.split('\n')[0]).sort()).toEqual([
+                '<b>Upcoming Dota 2 Match!</b>',
+                '🎮 <b>Map 1 Result</b>',
+                '🏁 <b>Match Over</b>',
+                '🏆 <b>Champions!</b>',
+                '📢 <b>New Match Scheduled!</b>',
+            ].sort());
+            expect(messagesTo(222)).toHaveLength(4);
+            expect(sendDocument).toHaveBeenCalledTimes(2);
+        });
+
+        it('should not re-announce what was already sent before notifications moved from KV to D1', async () => {
+            subscribe([111, 10]);
+            kvStore.set('match_announced_known_500', 'true');
+            kvStore.set('game_501_5011', 'true');
+            kvStore.set('match_final_502', 'true');
+            kvStore.set('tournament_result_99_10', 'true');
+            mockPandaScoreClient.getUpcomingMatches.mockResolvedValue([
+                buildMatch({
+                    id: 500,
+                    status: 'not_started',
+                    winner: null,
+                    games: [],
+                    begin_at: new Date(Date.now() + 3 * 60 * MINUTE).toISOString(),
+                    end_at: null,
+                }),
+            ]);
+            mockPandaScoreClient.getRunningMatches.mockResolvedValue([
+                buildMatch({ id: 501, status: 'running', winner: null, games: [game(5011, 1, 10)] }),
+            ]);
+            mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([
+                buildMatch({ id: 502, tournament_id: 99, tournament: stage(99, 'Playoffs', 10) }),
+            ]);
+
+            await handleCron(mockEnv, CRON);
+            const kvReadsOnFirstRun = mockKv.get.mock.calls.length;
+            await handleCron(mockEnv, CRON);
+
+            expect(sendMessage).not.toHaveBeenCalled();
+            expect(sendDocument).not.toHaveBeenCalled();
+            // Each old entry is copied to D1 on first sight, so KV is not consulted for it again.
+            expect(Array.from(sent.keys())).toEqual(expect.arrayContaining([
+                'match_announced_known_500', 'game_501_5011', 'match_final_502', 'tournament_result_99_10',
+            ]));
+            expect(mockKv.get.mock.calls.length).toBe(kvReadsOnFirstRun);
+            expect(mockKv.put).not.toHaveBeenCalled();
+        });
+
+        it('should not send when another run has already claimed the notification', async () => {
+            subscribe([111, 10]);
+            mockPandaScoreClient.getRecentlyFinishedMatches.mockResolvedValue([buildMatch()]);
+            // The log was loaded before the other run recorded its claim, so only the claim itself can tell.
+            mockDb.claimNotification.mockResolvedValue(false);
+
+            await handleCron(mockEnv, CRON);
+
+            expect(mockDb.claimNotification).toHaveBeenCalledWith('match_final_300', 86400);
+            expect(sendMessage).not.toHaveBeenCalled();
         });
 
         it('should not re-send to anyone on the next run when one recipient failed', async () => {

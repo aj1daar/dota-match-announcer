@@ -1,5 +1,6 @@
 DROP TABLE IF EXISTS Subscribers;
 DROP TABLE IF EXISTS TeamSubscriptions;
+DROP TABLE IF EXISTS SentNotifications;
 
 CREATE TABLE Subscribers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -16,4 +17,11 @@ CREATE TABLE TeamSubscriptions (
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (subscriberId) REFERENCES Subscribers(id) ON DELETE CASCADE,
     UNIQUE (subscriberId, teamId)
+);
+
+CREATE TABLE SentNotifications (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    expiresAt INTEGER NOT NULL,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
 );

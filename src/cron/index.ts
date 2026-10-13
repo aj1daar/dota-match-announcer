@@ -6,6 +6,7 @@ import { Telegraf } from 'telegraf';
 import { formatMatchTime, getTimezoneAbbreviation } from '../utils/timezone';
 import { escapeHtml } from '../utils/html';
 import { buildIcsCalendar } from '../utils/ics';
+import { NotificationLog } from './notificationLog';
 
 interface SubscriberMaps {
     teamIdToSubscriberIds: Map<number, Set<number>>;
@@ -211,7 +212,7 @@ async function isFinalStageOfSerie(
  * "finished in place #N" messages.
  */
 async function announceChampion(
-    env: Env,
+    log: NotificationLog,
     bot: Telegraf,
     pandaScoreClient: PandaScoreClient,
     match: Match,
@@ -227,22 +228,22 @@ async function announceChampion(
     const wonSerie = match.serie.winner_id === winner.id;
     if (!wonSerie && tournament.winner_id !== winner.id) return;
 
-    const kvKey = `tournament_result_${tournament.id}_${winner.id}`;
-    if (await env.NOTIFICATIONS_KV.get(kvKey)) return;
+    const championKey = `tournament_result_${tournament.id}_${winner.id}`;
+    if (await log.has(championKey)) return;
 
     if (!wonSerie) {
         const notFinalKey = `tournament_not_final_${tournament.id}`;
-        if (await env.NOTIFICATIONS_KV.get(notFinalKey)) return;
+        if (await log.has(notFinalKey)) return;
 
         const isFinalStage = await isFinalStageOfSerie(pandaScoreClient, match);
         if (isFinalStage === null) return;
         if (!isFinalStage) {
-            await env.NOTIFICATIONS_KV.put(notFinalKey, 'true', { expirationTtl: 86400 });
+            await log.claim(notFinalKey, 86400);
             return;
         }
     }
 
-    await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 2592000 });
+    if (!(await log.claim(championKey, 2592000))) return;
 
     const message = formatChampionMessage(match, winner.name);
     for (const subId of subscriberIds) {
@@ -259,12 +260,12 @@ async function announceChampion(
 }
 
 async function announceFinalResult(
-    env: Env,
+    log: NotificationLog,
     bot: Telegraf,
     match: Match,
     maps: SubscriberMaps,
 ): Promise<void> {
-    await env.NOTIFICATIONS_KV.put(`match_final_${match.id}`, 'true', { expirationTtl: 86400 });
+    if (!(await log.claim(`match_final_${match.id}`, 86400))) return;
 
     for (const telegramId of getTelegramIdsForMatch(match, maps)) {
         try {
@@ -279,7 +280,7 @@ async function announceFinalResult(
 }
 
 async function processFinishedMatches(
-    env: Env,
+    log: NotificationLog,
     bot: Telegraf,
     pandaScoreClient: PandaScoreClient,
     maps: SubscriberMaps,
@@ -291,7 +292,7 @@ async function processFinishedMatches(
         // A canceled match never gets a result, so there is nothing to wait for or announce.
         if (match.status === 'canceled') continue;
 
-        const alreadyNotified = await env.NOTIFICATIONS_KV.get(`match_final_${match.id}`);
+        const alreadyNotified = await log.has(`match_final_${match.id}`);
 
         if (!alreadyNotified) {
             // A drawn series (e.g. a 1-1 best-of-2) is final without ever having a winner.
@@ -308,7 +309,7 @@ async function processFinishedMatches(
                 }
             }
 
-            await announceFinalResult(env, bot, match, maps);
+            await announceFinalResult(log, bot, match, maps);
         }
 
         /*
@@ -316,12 +317,12 @@ async function processFinishedMatches(
          * window, not just the one that sent the final result: PandaScore can
          * take a while to set the tournament/serie winner after the last match.
          */
-        await announceChampion(env, bot, pandaScoreClient, match, maps);
+        await announceChampion(log, bot, pandaScoreClient, match, maps);
     }
 }
 
 async function processLiveMatches(
-    env: Env,
+    log: NotificationLog,
     bot: Telegraf,
     pandaScoreClient: PandaScoreClient,
     maps: SubscriberMaps,
@@ -335,11 +336,7 @@ async function processLiveMatches(
         );
 
         for (const game of finishedGames) {
-            const kvKey = `game_${match.id}_${game.id}`;
-            const alreadyNotified = await env.NOTIFICATIONS_KV.get(kvKey);
-            if (alreadyNotified) continue;
-
-            await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 86400 });
+            if (!(await log.claim(`game_${match.id}_${game.id}`, 86400))) continue;
 
             const telegramIds = getTelegramIdsForMatch(match, maps);
 
@@ -362,7 +359,7 @@ function isOpponentKnown(match: Match): boolean {
 }
 
 async function announceNewMatch(
-    env: Env,
+    log: NotificationLog,
     bot: Telegraf,
     match: Match,
     maps: SubscriberMaps,
@@ -372,30 +369,26 @@ async function announceNewMatch(
     const tbdKey = `match_announced_tbd_${match.id}`;
 
     if (!opponentKnown) {
-        const alreadyNotified = await env.NOTIFICATIONS_KV.get(tbdKey);
-        if (alreadyNotified) return;
+        if (!(await log.claim(tbdKey, 2592000))) return;
 
-        await env.NOTIFICATIONS_KV.put(tbdKey, 'true', { expirationTtl: 2592000 });
-
-        await sendToMatchRecipients(env, bot, match, maps, () => formatAdvancingMessage(match));
+        await sendToMatchRecipients(bot, match, maps, () => formatAdvancingMessage(match));
 
         console.log(`[upcoming] Announced advancement for match ${match.id} (opponent not yet known)`);
         return;
     }
 
-    const alreadyNotified = await env.NOTIFICATIONS_KV.get(knownKey);
-    if (alreadyNotified) return;
+    if (await log.has(knownKey)) return;
 
     /*
      * If we already told subscribers their team advanced while the opponent was
      * still TBD, this is the follow-up reveal, not a brand new match - the two
      * deserve different framing rather than one dedup key swallowing the second.
      */
-    const wasPreviouslyTbd = !!(await env.NOTIFICATIONS_KV.get(tbdKey));
+    const wasPreviouslyTbd = await log.has(tbdKey);
     const title = wasPreviouslyTbd ? '🎭 <b>Opponent Revealed!</b>' : '📢 <b>New Match Scheduled!</b>';
-    await env.NOTIFICATIONS_KV.put(knownKey, 'true', { expirationTtl: 2592000 });
+    if (!(await log.claim(knownKey, 2592000))) return;
 
-    await sendToMatchRecipients(env, bot, match, maps, (userTimezone) =>
+    await sendToMatchRecipients(bot, match, maps, (userTimezone) =>
         formatMatchAnnouncement(match, userTimezone, title),
     );
 
@@ -429,7 +422,6 @@ function buildMatchCalendarFile(match: Match): { source: Buffer; filename: strin
 }
 
 async function sendToMatchRecipients(
-    env: Env,
     bot: Telegraf,
     match: Match,
     maps: SubscriberMaps,
@@ -462,20 +454,18 @@ async function sendToMatchRecipients(
 }
 
 async function announceMatchStartingSoon(
-    env: Env,
+    log: NotificationLog,
     bot: Telegraf,
     match: Match,
     maps: SubscriberMaps,
 ): Promise<void> {
     const notificationKey = `match_${match.id}`;
-    const notified = await env.NOTIFICATIONS_KV.get(notificationKey);
-    if (notified) return;
 
     const matchTime = new Date(match.begin_at).getTime();
     const timeUntilMatch = matchTime - Date.now();
 
     if (timeUntilMatch > 0 && timeUntilMatch <= 600000) {
-        await env.NOTIFICATIONS_KV.put(notificationKey, 'true', { expirationTtl: 86400 });
+        if (!(await log.claim(notificationKey, 86400))) return;
 
         const telegramIds = getTelegramIdsForMatch(match, maps);
 
@@ -495,7 +485,7 @@ async function announceMatchStartingSoon(
 }
 
 async function processUpcomingMatches(
-    env: Env,
+    log: NotificationLog,
     bot: Telegraf,
     pandaScoreClient: PandaScoreClient,
     maps: SubscriberMaps,
@@ -504,8 +494,8 @@ async function processUpcomingMatches(
     console.log(`[upcoming] Found ${matches.length} upcoming matches`);
 
     for (const match of matches) {
-        await announceNewMatch(env, bot, match, maps);
-        await announceMatchStartingSoon(env, bot, match, maps);
+        await announceNewMatch(log, bot, match, maps);
+        await announceMatchStartingSoon(log, bot, match, maps);
     }
 }
 
@@ -567,50 +557,26 @@ function formatUpcomingMatchMessage(match: Match, userTimezone = 'UTC'): string 
 🏆 ${league} - ${serie}`;
 }
 
-/*
- * Every notification is deduped by a KV key that is written *before* the
- * messages go out: a run that dies half-way then costs at most one missed
- * notification instead of re-sending to everyone a minute later.
- *
- * KV is only eventually consistent, and in particular caches "key not found"
- * for a while, so a key written earlier in a run can still read back as
- * missing later in that same run. This wrapper makes a run always see its own
- * writes, so nothing is announced twice within one run (e.g. if PandaScore
- * lists the same match twice).
- */
-function rememberOwnWrites(kv: KVNamespace): KVNamespace {
-    const written = new Map<string, string>();
-    return {
-        get: async (key: string) => written.get(key) ?? kv.get(key),
-        put: async (key: string, value: string, options?: KVNamespacePutOptions) => {
-            written.set(key, value);
-            await kv.put(key, value, options);
-        },
-    } as unknown as KVNamespace;
-}
-
-export async function handleCron(baseEnv: Env, cron?: string) {
+export async function handleCron(env: Env, cron?: string) {
     console.log(`Cron job started (trigger: ${cron})...`);
-
-    const env: Env = { ...baseEnv, NOTIFICATIONS_KV: rememberOwnWrites(baseEnv.NOTIFICATIONS_KV) };
 
     const maps = await buildSubscriberMaps(env);
     if (!maps) return;
 
     const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN);
-    const pandaScoreClient = new PandaScoreClient(baseEnv);
+    const pandaScoreClient = new PandaScoreClient(env);
+    const log = await NotificationLog.load(env);
 
     /*
      * Everything runs on the single 1-minute trigger so a newly scheduled match
      * - e.g. the next round after a team advances - gets announced within a
-     * minute of PandaScore publishing it. There must be only one cron schedule:
-     * two schedules firing in the same minute run concurrently, both pass the
-     * KV dedup check before either writes, and every notification goes out twice.
+     * minute of PandaScore publishing it. Keep it to one cron schedule: a
+     * second one firing in the same minute would only repeat the same work.
      */
     const steps: Array<[string, () => Promise<void>]> = [
-        ['upcoming', () => processUpcomingMatches(env, bot, pandaScoreClient, maps)],
-        ['live', () => processLiveMatches(env, bot, pandaScoreClient, maps)],
-        ['finished', () => processFinishedMatches(env, bot, pandaScoreClient, maps)],
+        ['upcoming', () => processUpcomingMatches(log, bot, pandaScoreClient, maps)],
+        ['live', () => processLiveMatches(log, bot, pandaScoreClient, maps)],
+        ['finished', () => processFinishedMatches(log, bot, pandaScoreClient, maps)],
     ];
     for (const [name, run] of steps) {
         // One failing step (e.g. a PandaScore error on a single endpoint) must not cost the others their run.

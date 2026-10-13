@@ -46,6 +46,11 @@ describe('handleCron', () => {
             getAllSubscriptions: jest.fn(),
             getAllSubscribers: jest.fn(),
             getSubscribersByTeamId: jest.fn(),
+            getActiveNotifications: jest.fn().mockResolvedValue([]),
+            claimNotification: jest.fn().mockResolvedValue(true),
+            updateNotificationValue: jest.fn().mockResolvedValue(true),
+            releaseNotification: jest.fn(),
+            deleteExpiredNotifications: jest.fn(),
         } as unknown as ReturnType<typeof getDb>;
         (getDb as jest.Mock).mockReturnValue(mockDb);
 
@@ -62,6 +67,11 @@ describe('handleCron', () => {
     afterEach(() => {
         jest.clearAllMocks();
     });
+
+    // Keys recorded as sent in D1 during the run, with the TTL each was given.
+    const claims = (): Array<[string, number]> =>
+        (mockDb.claimNotification as jest.Mock).mock.calls.map(call => [call[0], call[1]]);
+    const claimedKeys = (): string[] => claims().map(([key]) => key);
 
     it('should not run if there are no subscriptions', async () => {
         (mockDb.getAllSubscriptions as jest.Mock).mockResolvedValue([]);
@@ -117,7 +127,7 @@ describe('handleCron', () => {
             expect.stringContaining('Upcoming Dota 2 Match!'),
             { parse_mode: 'HTML' },
         );
-        expect(mockKv.put).toHaveBeenCalledWith('match_1', 'true', { expirationTtl: 86400 });
+        expect(claims()).toContainEqual(['match_1', 86400]);
     });
 
     it('should not attach a calendar file to the starting-soon reminder on its own', async () => {
@@ -212,7 +222,7 @@ describe('handleCron', () => {
             expect.stringContaining('Team Liquid vs Team Secret'),
             { parse_mode: 'HTML' },
         );
-        expect(mockKv.put).toHaveBeenCalledWith('match_announced_known_500', 'true', { expirationTtl: 2592000 });
+        expect(claims()).toContainEqual(['match_announced_known_500', 2592000]);
 
         expect(mockBot.telegram.sendDocument).toHaveBeenCalledTimes(1);
         const [chatId, document] = (mockBot.telegram.sendDocument as jest.Mock).mock.calls[0];
@@ -271,7 +281,7 @@ describe('handleCron', () => {
             expect.stringContaining('TBD'),
             expect.anything(),
         );
-        expect(mockKv.put).toHaveBeenCalledWith('match_announced_tbd_501', 'true', { expirationTtl: 2592000 });
+        expect(claims()).toContainEqual(['match_announced_tbd_501', 2592000]);
 
         expect(mockBot.telegram.sendDocument).toHaveBeenCalledTimes(1);
         const [, document] = (mockBot.telegram.sendDocument as jest.Mock).mock.calls[0];
@@ -321,7 +331,7 @@ describe('handleCron', () => {
             expect.stringContaining('advances to the next round'),
             { parse_mode: 'HTML' },
         );
-        expect(mockKv.put).toHaveBeenCalledWith('match_announced_tbd_504', 'true', { expirationTtl: 2592000 });
+        expect(claims()).toContainEqual(['match_announced_tbd_504', 2592000]);
     });
 
     it('should announce the confirmed opponent once it resolves, even after the TBD announcement already fired', async () => {
@@ -377,7 +387,7 @@ describe('handleCron', () => {
             expect.stringContaining('New Match Scheduled'),
             expect.anything(),
         );
-        expect(mockKv.put).toHaveBeenCalledWith('match_announced_known_502', 'true', { expirationTtl: 2592000 });
+        expect(claims()).toContainEqual(['match_announced_known_502', 2592000]);
     });
 
     it('should not re-announce a match that was already announced with a known opponent', async () => {
@@ -459,6 +469,7 @@ describe('handleCron', () => {
 
         expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
         expect(mockKv.put).not.toHaveBeenCalled();
+        expect(claims().filter(([, ttl]) => ttl !== 2592000)).toEqual([]);
     });
 
     it('should not send the starting-soon reminder for matches more than 10 minutes away (new-match announcement still fires)', async () => {
@@ -500,7 +511,7 @@ describe('handleCron', () => {
             expect.stringContaining('Upcoming Dota 2 Match!'),
             expect.anything(),
         );
-        expect(mockKv.put).not.toHaveBeenCalledWith('match_1', 'true', expect.anything());
+        expect(claimedKeys()).not.toContain('match_1');
     });
 
     // --- Live match / per-map tests (1-min cron) ---
@@ -564,7 +575,7 @@ describe('handleCron', () => {
             expect.stringContaining('wins Map 1!'),
             { parse_mode: 'HTML' },
         );
-        expect(mockKv.put).toHaveBeenCalledWith('game_100_1001', 'true', { expirationTtl: 86400 });
+        expect(claims()).toContainEqual(['game_100_1001', 86400]);
     });
 
     it('should resolve winner name from opponents since game.winner only has id and type', async () => {
@@ -714,6 +725,7 @@ describe('handleCron', () => {
 
         expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
         expect(mockKv.put).not.toHaveBeenCalled();
+        expect(claims().filter(([, ttl]) => ttl !== 2592000)).toEqual([]);
     });
 
     // --- Final match result tests ---
@@ -770,7 +782,7 @@ describe('handleCron', () => {
             expect.stringContaining('wins the series 2–1'),
             { parse_mode: 'HTML' },
         );
-        expect(mockKv.put).toHaveBeenCalledWith('match_final_200', 'true', { expirationTtl: 86400 });
+        expect(claims()).toContainEqual(['match_final_200', 86400]);
     });
 
     it('should not re-send final result if already notified', async () => {
@@ -811,6 +823,7 @@ describe('handleCron', () => {
 
         expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
         expect(mockKv.put).not.toHaveBeenCalled();
+        expect(claims().filter(([, ttl]) => ttl !== 2592000)).toEqual([]);
     });
 
     describe('result wording and champion announcement', () => {
@@ -933,7 +946,7 @@ describe('handleCron', () => {
             expect(mockPandaScoreClient.getSerieById).toHaveBeenCalledWith(7);
             expect(messagesTo(111)).toContainEqual(expect.stringContaining('won the tournament'));
             expect(messagesTo(111)).toContainEqual(expect.stringContaining('ESL One - Spring 2024'));
-            expect(mockKv.put).toHaveBeenCalledWith('tournament_result_99_10', 'true', { expirationTtl: 2592000 });
+            expect(claims()).toContainEqual(['tournament_result_99_10', 2592000]);
         });
 
         it('should not announce a champion for winning a stage that is not the last one', async () => {
@@ -949,7 +962,7 @@ describe('handleCron', () => {
 
             expect(messagesTo(111)).toHaveLength(1);
             expect(messagesTo(111)[0]).toContain('Match Over');
-            expect(mockKv.put).toHaveBeenCalledWith('tournament_not_final_98', 'true', { expirationTtl: 86400 });
+            expect(claims()).toContainEqual(['tournament_not_final_98', 86400]);
         });
 
         it('should announce the champion without a serie lookup when the serie itself names the winner', async () => {
@@ -1031,8 +1044,8 @@ describe('handleCron', () => {
             await handleCron(mockEnv, LIVE_CRON);
 
             expect(messagesTo(111)).toEqual([expect.stringContaining('Match Over')]);
-            expect(mockKv.put).toHaveBeenCalledTimes(1);
-            expect(mockKv.put).toHaveBeenCalledWith('match_final_300', 'true', { expirationTtl: 86400 });
+            expect(claims()).toHaveLength(1);
+            expect(claims()).toContainEqual(['match_final_300', 86400]);
         });
     });
 
@@ -1082,6 +1095,7 @@ describe('handleCron', () => {
 
         expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
         expect(mockKv.put).not.toHaveBeenCalled();
+        expect(claims().filter(([, ttl]) => ttl !== 2592000)).toEqual([]);
     });
 
     it('should retry getMatchById when match.winner is null and send once winner is available', async () => {
@@ -1137,7 +1151,7 @@ describe('handleCron', () => {
             expect.stringContaining('wins the series 2–0'),
             { parse_mode: 'HTML' },
         );
-        expect(mockKv.put).toHaveBeenCalledWith('match_final_300', 'true', { expirationTtl: 86400 });
+        expect(claims()).toContainEqual(['match_final_300', 86400]);
     });
 
     it('should skip match when winner still unavailable after getMatchById retry', async () => {
@@ -1177,5 +1191,6 @@ describe('handleCron', () => {
         expect(mockPandaScoreClient.getMatchById).toHaveBeenCalledWith(400);
         expect(mockBot.telegram.sendMessage).not.toHaveBeenCalled();
         expect(mockKv.put).not.toHaveBeenCalled();
+        expect(claims().filter(([, ttl]) => ttl !== 2592000)).toEqual([]);
     });
 });
