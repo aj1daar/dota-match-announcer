@@ -35,4 +35,17 @@ describe('buildIcsCalendar', () => {
         expect(ics).toContain('SUMMARY:A\\; B\\, C\\\\D');
         expect(ics).toContain('DESCRIPTION:line1\\nline2');
     });
+
+    it('adds a SEQUENCE only when re-issuing an event', () => {
+        const event = {
+            uid: 'match-1@test',
+            summary: 'A vs B',
+            description: 'Final',
+            start: new Date('2030-01-01T12:00:00Z'),
+            durationMinutes: 60,
+        };
+
+        expect(buildIcsCalendar(event)).not.toContain('SEQUENCE');
+        expect(buildIcsCalendar({ ...event, sequence: 42 }).split('\r\n')).toContain('SEQUENCE:42');
+    });
 });

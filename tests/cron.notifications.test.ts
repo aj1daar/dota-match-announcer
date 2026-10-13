@@ -602,6 +602,162 @@ describe('cron notifications', () => {
         });
     });
 
+    describe('rescheduled matches', () => {
+        const HOUR = 60 * MINUTE;
+        let base: number;
+
+        const upcoming = (startsInMs: number, overrides: Partial<Match> = {}): Match =>
+            buildMatch({
+                id: 500,
+                status: 'not_started',
+                winner: null,
+                games: [],
+                begin_at: new Date(base + startsInMs).toISOString(),
+                end_at: null,
+                ...overrides,
+            });
+        const runWith = async (match: Match) => {
+            mockPandaScoreClient.getUpcomingMatches.mockResolvedValue([match]);
+            await handleCron(mockEnv, CRON);
+        };
+        const titlesTo = (telegramId: number) => messagesTo(telegramId).map(m => m.split('\n')[0]);
+        const calendarText = (callIndex: number): string =>
+            (sendDocument.mock.calls[callIndex][1].source as Buffer).toString('utf-8');
+
+        beforeEach(() => {
+            // A fixed, whole-minute "now" so formatted times in assertions are predictable.
+            base = Date.UTC(2030, 0, 15, 12, 0, 0);
+            jest.spyOn(Date, 'now').mockImplementation(() => base);
+        });
+
+        it('should announce the new time, show the old one, and send an updated calendar entry', async () => {
+            subscribe([111, 10]);
+            await runWith(upcoming(3 * HOUR));
+            await runWith(upcoming(5 * HOUR));
+
+            expect(titlesTo(111)).toEqual(['📢 <b>New Match Scheduled!</b>', '⏰ <b>Match Rescheduled</b>']);
+            const reschedule = messagesTo(111)[1];
+            expect(reschedule).toContain('<b>Team Liquid vs Team Secret</b>');
+            expect(reschedule).toContain('🗓️ Jan 15, 2030, 17:00 UTC');
+            expect(reschedule).toContain('↩️ Was: Jan 15, 2030, 15:00 UTC');
+
+            expect(sendDocument).toHaveBeenCalledTimes(2);
+            expect(calendarText(0)).toContain('DTSTART:20300115T150000Z');
+            expect(calendarText(0)).not.toContain('SEQUENCE');
+            expect(calendarText(1)).toContain('DTSTART:20300115T170000Z');
+            expect(calendarText(1)).toContain('UID:dota-match-500@dota-match-announcer');
+            expect(calendarText(1)).toMatch(/SEQUENCE:[1-9]\d*/);
+        });
+
+        it('should announce a reschedule once, not on every run after it', async () => {
+            subscribe([111, 10]);
+            await runWith(upcoming(3 * HOUR));
+            await runWith(upcoming(5 * HOUR));
+            await runWith(upcoming(5 * HOUR));
+            await runWith(upcoming(5 * HOUR));
+
+            expect(titlesTo(111).filter(t => t.includes('Rescheduled'))).toHaveLength(1);
+        });
+
+        it('should announce a match that moves earlier, and one that moves again', async () => {
+            subscribe([111, 10]);
+            await runWith(upcoming(5 * HOUR));
+            await runWith(upcoming(3 * HOUR));
+            await runWith(upcoming(8 * HOUR));
+
+            const reschedules = messagesTo(111).filter(m => m.includes('Rescheduled'));
+            expect(reschedules).toHaveLength(2);
+            expect(reschedules[0]).toContain('🗓️ Jan 15, 2030, 15:00 UTC');
+            expect(reschedules[1]).toContain('🗓️ Jan 15, 2030, 20:00 UTC');
+            expect(reschedules[1]).toContain('↩️ Was: Jan 15, 2030, 15:00 UTC');
+        });
+
+        it('should ignore small shifts in the start time', async () => {
+            subscribe([111, 10]);
+            await runWith(upcoming(3 * HOUR));
+            await runWith(upcoming(3 * HOUR + 29 * MINUTE));
+            await runWith(upcoming(3 * HOUR - 29 * MINUTE));
+
+            expect(titlesTo(111)).toEqual(['📢 <b>New Match Scheduled!</b>']);
+            expect(sendDocument).toHaveBeenCalledTimes(1);
+        });
+
+        it('should report a start that creeps later in small steps once it has drifted far enough', async () => {
+            subscribe([111, 10]);
+            await runWith(upcoming(3 * HOUR));
+            await runWith(upcoming(3 * HOUR + 20 * MINUTE));
+            expect(titlesTo(111)).toHaveLength(1);
+
+            await runWith(upcoming(3 * HOUR + 40 * MINUTE));
+
+            expect(titlesTo(111)).toEqual(['📢 <b>New Match Scheduled!</b>', '⏰ <b>Match Rescheduled</b>']);
+            expect(messagesTo(111)[1]).toContain('↩️ Was: Jan 15, 2030, 15:00 UTC');
+        });
+
+        it('should show each subscriber the times in their own timezone', async () => {
+            subscribe([111, 10], [222, 20]);
+            const subscribers = await mockDb.getAllSubscribers();
+            subscribers[1].timezone = 'Asia/Tokyo';
+            await runWith(upcoming(3 * HOUR));
+            await runWith(upcoming(5 * HOUR));
+
+            expect(messagesTo(111)[1]).toContain('🗓️ Jan 15, 2030, 17:00 UTC');
+            expect(messagesTo(222)[1]).toContain('🗓️ Jan 16, 2030, 02:00 GMT+9');
+            expect(messagesTo(222)[1]).toContain('↩️ Was: Jan 16, 2030, 00:00 GMT+9');
+        });
+
+        it('should send the starting-soon reminder again for the new time', async () => {
+            subscribe([111, 10]);
+            await runWith(upcoming(5 * MINUTE));
+            expect(titlesTo(111)).toEqual(['📢 <b>New Match Scheduled!</b>', '<b>Upcoming Dota 2 Match!</b>']);
+
+            const postponed = upcoming(65 * MINUTE);
+            await runWith(postponed);
+            await runWith(postponed);
+            expect(titlesTo(111).slice(2)).toEqual(['⏰ <b>Match Rescheduled</b>']);
+
+            base += 58 * MINUTE;
+            await runWith(postponed);
+            await runWith(postponed);
+
+            expect(titlesTo(111).slice(3)).toEqual(['<b>Upcoming Dota 2 Match!</b>']);
+        });
+
+        it('should not announce a reschedule for a match whose announcement predates recorded start times', async () => {
+            subscribe([111, 10]);
+            kvStore.set('match_announced_known_500', 'true');
+
+            await runWith(upcoming(3 * HOUR));
+            await runWith(upcoming(3 * HOUR));
+            expect(sendMessage).not.toHaveBeenCalled();
+
+            await runWith(upcoming(6 * HOUR));
+
+            expect(titlesTo(111)).toEqual(['⏰ <b>Match Rescheduled</b>']);
+            expect(messagesTo(111)[0]).toContain('↩️ Was: Jan 15, 2030, 15:00 UTC');
+        });
+
+        it('should not announce a reschedule while the opponent is still unknown', async () => {
+            subscribe([111, 10]);
+            const tbd = { opponents: [{ opponent: liquid, type: 'Team' as const }] };
+            await runWith(upcoming(3 * HOUR, tbd));
+            await runWith(upcoming(6 * HOUR, tbd));
+
+            expect(titlesTo(111)).toEqual(['📢 <b>Next Match Locked In!</b>']);
+        });
+
+        it('should announce a reschedule once when cron runs overlap', async () => {
+            subscribe([111, 10]);
+            await runWith(upcoming(3 * HOUR));
+            mockPandaScoreClient.getUpcomingMatches.mockResolvedValue([upcoming(5 * HOUR)]);
+
+            await Promise.all([handleCron(mockEnv, CRON), handleCron(mockEnv, CRON), handleCron(mockEnv, CRON)]);
+
+            expect(titlesTo(111)).toEqual(['📢 <b>New Match Scheduled!</b>', '⏰ <b>Match Rescheduled</b>']);
+            expect(sendDocument).toHaveBeenCalledTimes(2);
+        });
+    });
+
     describe('matches without a winner', () => {
         it('should announce a drawn series instead of waiting for a winner that never comes', async () => {
             subscribe([111, 10]);

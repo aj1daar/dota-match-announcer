@@ -73,4 +73,21 @@ export class NotificationLog {
         this.known.set(key, value ?? null);
         return claimed;
     }
+
+    /*
+     * Replaces the value stored with a key, but only if nobody else changed it
+     * since this run loaded it. Resolves true for the one caller that made the
+     * change, which makes "the value moved from A to B" a once-only event too.
+     */
+    async updateValue(key: string, value: string): Promise<boolean> {
+        const updated = await this.db.updateNotificationValue(key, this.value(key), value);
+        this.known.set(key, value);
+        return updated;
+    }
+
+    // Forgets a notification so it can be sent again.
+    async release(key: string): Promise<void> {
+        await this.db.releaseNotification(key);
+        this.known.delete(key);
+    }
 }

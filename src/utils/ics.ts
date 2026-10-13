@@ -16,6 +16,8 @@ export interface IcsEvent {
     description: string;
     start: Date;
     durationMinutes: number;
+    // Set (and raise) when re-issuing an event, so calendars treat it as an update to the one they already have.
+    sequence?: number;
 }
 
 export function buildIcsCalendar(event: IcsEvent): string {
@@ -29,6 +31,7 @@ export function buildIcsCalendar(event: IcsEvent): string {
         'BEGIN:VEVENT',
         `UID:${event.uid}`,
         `DTSTAMP:${formatIcsDate(new Date())}`,
+        ...(event.sequence === undefined ? [] : [`SEQUENCE:${event.sequence}`]),
         `DTSTART:${formatIcsDate(event.start)}`,
         `DTEND:${formatIcsDate(end)}`,
         `SUMMARY:${escapeIcsText(event.summary)}`,

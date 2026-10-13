@@ -354,6 +354,9 @@ async function processLiveMatches(
     }
 }
 
+// Start-time changes smaller than this are schedule jitter, not worth a message.
+const RESCHEDULE_THRESHOLD_MS = 30 * 60 * 1000;
+
 function isOpponentKnown(match: Match): boolean {
     return match.opponents.length === 2 && !!match.opponents[0]?.opponent && !!match.opponents[1]?.opponent;
 }
@@ -377,7 +380,10 @@ async function announceNewMatch(
         return;
     }
 
-    if (await log.has(knownKey)) return;
+    if (await log.has(knownKey)) {
+        await announceReschedule(log, bot, match, maps, knownKey);
+        return;
+    }
 
     /*
      * If we already told subscribers their team advanced while the opponent was
@@ -386,7 +392,8 @@ async function announceNewMatch(
      */
     const wasPreviouslyTbd = await log.has(tbdKey);
     const title = wasPreviouslyTbd ? '🎭 <b>Opponent Revealed!</b>' : '📢 <b>New Match Scheduled!</b>';
-    if (!(await log.claim(knownKey, 2592000))) return;
+    // The announced start time is kept with the claim, so a later change to it can be noticed.
+    if (!(await log.claim(knownKey, 2592000, match.begin_at))) return;
 
     await sendToMatchRecipients(bot, match, maps, (userTimezone) =>
         formatMatchAnnouncement(match, userTimezone, title),
@@ -395,7 +402,56 @@ async function announceNewMatch(
     console.log(`[upcoming] Announced match ${match.id} (revealed: ${wasPreviouslyTbd})`);
 }
 
-function buildMatchCalendarFile(match: Match): { source: Buffer; filename: string } | null {
+/*
+ * Tells subscribers when an already-announced match moves, and sends a fresh
+ * calendar file - otherwise the time in the original announcement and the
+ * calendar entry made from it quietly go stale.
+ */
+async function announceReschedule(
+    log: NotificationLog,
+    bot: Telegraf,
+    match: Match,
+    maps: SubscriberMaps,
+    knownKey: string,
+): Promise<void> {
+    const newStart = new Date(match.begin_at).getTime();
+    if (isNaN(newStart)) return;
+
+    const announcedBeginAt = log.value(knownKey);
+    const announcedStart = announcedBeginAt ? new Date(announcedBeginAt).getTime() : NaN;
+    if (!announcedBeginAt || isNaN(announcedStart)) {
+        // Announced before start times were recorded: take the current one as the baseline, silently.
+        await log.updateValue(knownKey, match.begin_at);
+        return;
+    }
+
+    /*
+     * Measured against the time subscribers were last told, not the previous
+     * run, so a start that creeps a few minutes at a time still gets reported
+     * once it has drifted far enough.
+     */
+    if (Math.abs(newStart - announcedStart) < RESCHEDULE_THRESHOLD_MS) return;
+
+    if (!(await log.updateValue(knownKey, match.begin_at))) return;
+
+    // The "starting soon" reminder may already have gone out for the old time.
+    await log.release(`match_${match.id}`);
+
+    await sendToMatchRecipients(
+        bot,
+        match,
+        maps,
+        (userTimezone) => formatRescheduleMessage(match, announcedBeginAt, userTimezone),
+        Math.floor(Date.now() / 1000),
+    );
+
+    console.log(`[upcoming] Announced reschedule of match ${match.id} (${announcedBeginAt} -> ${match.begin_at})`);
+}
+
+function buildMatchCalendarFile(
+    match: Match,
+    sequence?: number,
+): { source: Buffer; filename: string } | null {
     const start = new Date(match.begin_at);
     if (isNaN(start.getTime())) return null;
 
@@ -416,6 +472,7 @@ function buildMatchCalendarFile(match: Match): { source: Buffer; filename: strin
         description,
         start,
         durationMinutes,
+        sequence,
     });
 
     return { source: Buffer.from(ics, 'utf-8'), filename: `match-${match.id}.ics` };
@@ -426,9 +483,10 @@ async function sendToMatchRecipients(
     match: Match,
     maps: SubscriberMaps,
     buildMessage: (userTimezone: string) => string,
+    calendarSequence?: number,
 ): Promise<void> {
     const telegramIds = getTelegramIdsForMatch(match, maps);
-    const calendarFile = buildMatchCalendarFile(match);
+    const calendarFile = buildMatchCalendarFile(match, calendarSequence);
 
     for (const telegramId of telegramIds) {
         try {
@@ -532,6 +590,29 @@ ${title}
 
 <b>${team1} vs ${team2}</b>
 🗓️ ${formattedTime} ${tzAbbr}${boInfo}
+🏆 ${league} - ${serie}`;
+}
+
+function formatRescheduleMessage(match: Match, previousBeginAt: string, userTimezone: string): string {
+    const team1 = escapeHtml(match.opponents[0]?.opponent?.name || 'TBD');
+    const team2 = escapeHtml(match.opponents[1]?.opponent?.name || 'TBD');
+    const league = escapeHtml(match.league.name);
+    const serie = escapeHtml(match.serie.full_name);
+
+    const newTime = formatMatchTime(match.begin_at, userTimezone);
+    const newTzAbbr = getTimezoneAbbreviation(new Date(match.begin_at), userTimezone);
+    const previousTime = formatMatchTime(previousBeginAt, userTimezone);
+    const previousTzAbbr = getTimezoneAbbreviation(new Date(previousBeginAt), userTimezone);
+    const boInfo = match.number_of_games
+        ? `\n🎮 Best of ${match.number_of_games} (BO${match.number_of_games})`
+        : '';
+
+    return `\
+⏰ <b>Match Rescheduled</b>
+
+<b>${team1} vs ${team2}</b>
+🗓️ ${newTime} ${newTzAbbr}
+↩️ Was: ${previousTime} ${previousTzAbbr}${boInfo}
 🏆 ${league} - ${serie}`;
 }
 

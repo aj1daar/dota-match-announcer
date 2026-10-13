@@ -153,7 +153,7 @@ To set up these secrets:
 -   **PandaScore Integration:** Migrate the logic for fetching match data and searching teams to the new `src/pandascore` module.
 -   **User Subscriptions:** Store user and team subscription data in Cloudflare D1.
 -   **Match Polling:** The cron trigger will initiate polling for upcoming matches from PandaScore.
--   **Notifications:** Send Telegram notifications for new matches based on subscriptions. Use Cloudflare KV to track sent notifications to prevent duplicates.
+-   **Notifications:** Send Telegram notifications for new matches based on subscriptions. Sent notifications are recorded in D1 (`SentNotifications`), claimed atomically so each goes out once.
 -   **Webhooks (Optional):** While polling is the primary method for match updates via cron, the worker can still expose an endpoint for PandaScore webhooks if desired.
 
 This README will be updated as the refactoring progresses.
