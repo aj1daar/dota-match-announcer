@@ -33,7 +33,8 @@ export function formatMatchTime(utcDateString: string, userTimezone: string): st
             day: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
-            hour12: false,
+            // Not hour12: false - some runtimes render midnight as "24:00" with it.
+            hourCycle: 'h23',
         });
 
         return formatter.format(date);
