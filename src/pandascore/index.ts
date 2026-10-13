@@ -83,6 +83,13 @@ export interface Match {
 const TEAMS_CACHE_KEY = 'pandascore_teams_cache';
 const TEAMS_CACHE_TTL_SECONDS = 3600;
 
+// PandaScore's maximum page size.
+const MATCHES_PAGE_SIZE = 100;
+// Safety valve so a misbehaving API can never keep one run paging forever.
+const MATCHES_MAX_PAGES = 10;
+// Keeps the opponent filter (and with it the request URL) to a sane length.
+const TEAM_IDS_PER_REQUEST = 50;
+
 export class PandaScoreClient {
     private readonly apiRoot: string = 'https://api.pandascore.co';
     private readonly baseUrl: string = 'https://api.pandascore.co/dota2';
@@ -227,25 +234,58 @@ export class PandaScoreClient {
         return matchingTeams;
     }
 
+    /*
+     * Fetches every match on an endpoint for the given teams, not just the first
+     * page: with enough followed teams a single page gets truncated, and the
+     * matches that fall off the end would silently never be announced.
+     */
+    private async fetchAllMatches(
+        endpoint: string,
+        teamIds: number[],
+        params: Record<string, any> = {},
+    ): Promise<Match[]> {
+        const matchesById = new Map<number, Match>();
+
+        for (let start = 0; start < teamIds.length; start += TEAM_IDS_PER_REQUEST) {
+            const teamIdChunk = teamIds.slice(start, start + TEAM_IDS_PER_REQUEST);
+
+            for (let page = 1; page <= MATCHES_MAX_PAGES; page++) {
+                const matches = await this.request<Match[]>(endpoint, {
+                    ...params,
+                    'filter[opponent_id]': teamIdChunk.join(','),
+                    'page[size]': MATCHES_PAGE_SIZE,
+                    'page[number]': page,
+                });
+
+                // Two followed teams facing each other can come back once per chunk.
+                for (const match of matches) {
+                    if (!matchesById.has(match.id)) matchesById.set(match.id, match);
+                }
+
+                if (matches.length < MATCHES_PAGE_SIZE) break;
+                if (page === MATCHES_MAX_PAGES) {
+                    console.error(`[PandaScore] ${endpoint} still had results after ${MATCHES_MAX_PAGES} pages; the rest were skipped`);
+                }
+            }
+        }
+
+        return Array.from(matchesById.values());
+    }
+
     async getUpcomingMatches(teamIds: number[]): Promise<Match[]> {
         if (teamIds.length === 0) {
             return [];
         }
-        return this.request<Match[]>('/matches/upcoming', {
-            sort: 'begin_at',
-            'filter[opponent_id]': teamIds.join(','),
-            'page[size]': 50,
-        });
+        const matches = await this.fetchAllMatches('/matches/upcoming', teamIds, { sort: 'begin_at' });
+        // Each request is sorted, but results merged from several requests are not.
+        return matches.sort((a, b) => new Date(a.begin_at).getTime() - new Date(b.begin_at).getTime());
     }
 
     async getRunningMatches(teamIds: number[]): Promise<Match[]> {
         if (teamIds.length === 0) {
             return [];
         }
-        return this.request<Match[]>('/matches/running', {
-            'filter[opponent_id]': teamIds.join(','),
-            'page[size]': 50,
-        });
+        return this.fetchAllMatches('/matches/running', teamIds);
     }
 
     async getRecentlyFinishedMatches(teamIds: number[]): Promise<Match[]> {
@@ -254,11 +294,9 @@ export class PandaScoreClient {
         }
         const now = new Date();
         const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
-        return this.request<Match[]>('/matches/past', {
-            'filter[opponent_id]': teamIds.join(','),
+        return this.fetchAllMatches('/matches/past', teamIds, {
             'range[end_at]': `${twoHoursAgo.toISOString()},${now.toISOString()}`,
             sort: '-end_at',
-            'page[size]': 50,
         });
     }
 

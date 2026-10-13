@@ -216,6 +216,105 @@ describe('PandaScoreClient', () => {
         });
     });
 
+    describe('match pagination', () => {
+        const buildMatches = (count: number, firstId = 1): Match[] =>
+            Array.from({ length: count }, (_, i) => ({
+                id: firstId + i,
+                name: `Match ${firstId + i}`,
+                status: 'not_started',
+                begin_at: new Date(Date.UTC(2030, 0, 1, 0, firstId + i)).toISOString(),
+                end_at: null,
+                winner: null,
+                league: { name: 'League', image_url: null },
+                serie: { full_name: 'Serie' },
+                opponents: [],
+                games: [],
+                results: [],
+                streams_list: [],
+            }));
+        const requestedUrls = () => fetchMock.mock.calls.map(call => decodeURIComponent(call[0] as string));
+
+        it('should keep requesting pages until one comes back short', async () => {
+            fetchMock.mockResponses(
+                JSON.stringify(buildMatches(100, 1)),
+                JSON.stringify(buildMatches(100, 101)),
+                JSON.stringify(buildMatches(30, 201)),
+            );
+
+            const matches = await client.getUpcomingMatches([1]);
+
+            expect(matches).toHaveLength(230);
+            expect(requestedUrls().map(url => new URL(url).searchParams.get('page[number]'))).toEqual(['1', '2', '3']);
+            expect(requestedUrls().every(url => url.includes('page[size]=100'))).toBe(true);
+        });
+
+        it('should make a single request when everything fits on one page', async () => {
+            fetchMock.mockResponseOnce(JSON.stringify(buildMatches(99)));
+
+            const matches = await client.getRunningMatches([1]);
+
+            expect(matches).toHaveLength(99);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+        });
+
+        it('should stop on an empty page when the last full page was exactly the end', async () => {
+            fetchMock.mockResponses(JSON.stringify(buildMatches(100)), JSON.stringify([]));
+
+            const matches = await client.getRunningMatches([1]);
+
+            expect(matches).toHaveLength(100);
+            expect(fetchMock).toHaveBeenCalledTimes(2);
+        });
+
+        it('should give up after a bounded number of pages', async () => {
+            fetchMock.mockResponse(JSON.stringify(buildMatches(100)));
+            jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+            await client.getRunningMatches([1]);
+
+            expect(fetchMock).toHaveBeenCalledTimes(10);
+            jest.restoreAllMocks();
+        });
+
+        it('should split a long list of teams across requests and return each match once', async () => {
+            const teamIds = Array.from({ length: 120 }, (_, i) => i + 1);
+            fetchMock.mockResponses(
+                JSON.stringify(buildMatches(2, 1)),
+                JSON.stringify(buildMatches(2, 2)),
+                JSON.stringify(buildMatches(1, 10)),
+            );
+
+            const matches = await client.getRunningMatches(teamIds);
+
+            const filters = requestedUrls().map(url => (new URL(url).searchParams.get('filter[opponent_id]') ?? '').split(','));
+            expect(filters.map(ids => ids.length)).toEqual([50, 50, 20]);
+            expect(filters.flat().map(Number)).toEqual(teamIds);
+            expect(matches.map(m => m.id)).toEqual([1, 2, 3, 10]);
+        });
+
+        it('should return upcoming matches in start order even when merged from several requests', async () => {
+            const teamIds = Array.from({ length: 60 }, (_, i) => i + 1);
+            fetchMock.mockResponses(JSON.stringify(buildMatches(2, 20)), JSON.stringify(buildMatches(2, 5)));
+
+            const matches = await client.getUpcomingMatches(teamIds);
+
+            expect(matches.map(m => m.id)).toEqual([5, 6, 20, 21]);
+        });
+
+        it('should page through recently finished matches within the two-hour window', async () => {
+            fetchMock.mockResponses(JSON.stringify(buildMatches(100)), JSON.stringify(buildMatches(1, 101)));
+
+            const matches = await client.getRecentlyFinishedMatches([1, 2]);
+
+            expect(matches).toHaveLength(101);
+            for (const url of requestedUrls()) {
+                expect(url).toContain('/matches/past');
+                expect(url).toContain('range[end_at]=');
+                expect(url).toContain('filter[opponent_id]=1,2');
+            }
+        });
+    });
+
     describe('getSerieById', () => {
         it('should request the generic (non-/dota2) series endpoint', async () => {
             const mockSerie: Serie = {
