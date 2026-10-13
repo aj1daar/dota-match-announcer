@@ -145,7 +145,9 @@ function formatFinalResultMessage(match: Match, followedTeam: Team | null): stri
     const serie = escapeHtml(match.serie.full_name);
 
     let resultLine = `🏆 <b>${winnerName}</b> wins the series ${score1}–${score2}!`;
-    if (followedTeam && followedTeam.id !== match.winner?.id) {
+    if (match.draw) {
+        resultLine = `🤝 Series drawn ${score1}–${score2}.`;
+    } else if (followedTeam && followedTeam.id !== match.winner?.id) {
         // Lead with the followed team's own score, e.g. "lost the series 1–2".
         const [ownScore, otherScore] = followedTeam.id === team1?.id ? [score1, score2] : [score2, score1];
         resultLine = `💔 <b>${escapeHtml(followedTeam.name)}</b> lost the series ${ownScore}–${otherScore}.`;
@@ -240,6 +242,8 @@ async function announceChampion(
         }
     }
 
+    await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 2592000 });
+
     const message = formatChampionMessage(match, winner.name);
     for (const subId of subscriberIds) {
         const telegramId = maps.subscriberIdToTelegramId.get(subId);
@@ -251,7 +255,6 @@ async function announceChampion(
         }
     }
 
-    await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 2592000 });
     console.log(`[tournament] Announced team ${winner.id} as champion of tournament ${tournament.id}`);
 }
 
@@ -261,6 +264,8 @@ async function announceFinalResult(
     match: Match,
     maps: SubscriberMaps,
 ): Promise<void> {
+    await env.NOTIFICATIONS_KV.put(`match_final_${match.id}`, 'true', { expirationTtl: 86400 });
+
     for (const telegramId of getTelegramIdsForMatch(match, maps)) {
         try {
             const message = formatFinalResultMessage(match, getFollowedTeam(match, telegramId, maps));
@@ -270,7 +275,6 @@ async function announceFinalResult(
         }
     }
 
-    await env.NOTIFICATIONS_KV.put(`match_final_${match.id}`, 'true', { expirationTtl: 86400 });
     console.log(`[finished] Notified final result for match ${match.id}`);
 }
 
@@ -284,17 +288,21 @@ async function processFinishedMatches(
     console.log(`[finished] Found ${finishedMatches.length} recently finished matches`);
 
     for (let match of finishedMatches) {
+        // A canceled match never gets a result, so there is nothing to wait for or announce.
+        if (match.status === 'canceled') continue;
+
         const alreadyNotified = await env.NOTIFICATIONS_KV.get(`match_final_${match.id}`);
 
         if (!alreadyNotified) {
-            if (!match.winner?.id) {
+            // A drawn series (e.g. a 1-1 best-of-2) is final without ever having a winner.
+            if (!match.winner?.id && !match.draw) {
                 console.log(`[finished] Winner not yet available for match ${match.id}, re-fetching...`);
                 try {
                     match = await pandaScoreClient.getMatchById(match.id);
                 } catch (e) {
                     console.error(`[finished] Re-fetch failed for match ${match.id}:`, e);
                 }
-                if (!match.winner?.id) {
+                if (!match.winner?.id && !match.draw) {
                     console.log(`[finished] Still no winner for match ${match.id}, skipping until next run`);
                     continue;
                 }
@@ -331,6 +339,8 @@ async function processLiveMatches(
             const alreadyNotified = await env.NOTIFICATIONS_KV.get(kvKey);
             if (alreadyNotified) continue;
 
+            await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 86400 });
+
             const telegramIds = getTelegramIdsForMatch(match, maps);
 
             for (const telegramId of telegramIds) {
@@ -342,7 +352,6 @@ async function processLiveMatches(
                 }
             }
 
-            await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 86400 });
             console.log(`[live] Notified map ${game.position} result for match ${match.id}`);
         }
     }
@@ -366,9 +375,10 @@ async function announceNewMatch(
         const alreadyNotified = await env.NOTIFICATIONS_KV.get(tbdKey);
         if (alreadyNotified) return;
 
+        await env.NOTIFICATIONS_KV.put(tbdKey, 'true', { expirationTtl: 2592000 });
+
         await sendToMatchRecipients(env, bot, match, maps, () => formatAdvancingMessage(match));
 
-        await env.NOTIFICATIONS_KV.put(tbdKey, 'true', { expirationTtl: 2592000 });
         console.log(`[upcoming] Announced advancement for match ${match.id} (opponent not yet known)`);
         return;
     }
@@ -383,11 +393,12 @@ async function announceNewMatch(
      */
     const wasPreviouslyTbd = !!(await env.NOTIFICATIONS_KV.get(tbdKey));
     const title = wasPreviouslyTbd ? '🎭 <b>Opponent Revealed!</b>' : '📢 <b>New Match Scheduled!</b>';
+    await env.NOTIFICATIONS_KV.put(knownKey, 'true', { expirationTtl: 2592000 });
+
     await sendToMatchRecipients(env, bot, match, maps, (userTimezone) =>
         formatMatchAnnouncement(match, userTimezone, title),
     );
 
-    await env.NOTIFICATIONS_KV.put(knownKey, 'true', { expirationTtl: 2592000 });
     console.log(`[upcoming] Announced match ${match.id} (revealed: ${wasPreviouslyTbd})`);
 }
 
@@ -464,6 +475,8 @@ async function announceMatchStartingSoon(
     const timeUntilMatch = matchTime - Date.now();
 
     if (timeUntilMatch > 0 && timeUntilMatch <= 600000) {
+        await env.NOTIFICATIONS_KV.put(notificationKey, 'true', { expirationTtl: 86400 });
+
         const telegramIds = getTelegramIdsForMatch(match, maps);
 
         for (const telegramId of telegramIds) {
@@ -477,7 +490,6 @@ async function announceMatchStartingSoon(
             }
         }
 
-        await env.NOTIFICATIONS_KV.put(notificationKey, 'true', { expirationTtl: 86400 });
         console.log(`[upcoming] Notified upcoming match ${match.id}`);
     }
 }
@@ -555,14 +567,38 @@ function formatUpcomingMatchMessage(match: Match, userTimezone = 'UTC'): string 
 🏆 ${league} - ${serie}`;
 }
 
-export async function handleCron(env: Env, cron?: string) {
+/*
+ * Every notification is deduped by a KV key that is written *before* the
+ * messages go out: a run that dies half-way then costs at most one missed
+ * notification instead of re-sending to everyone a minute later.
+ *
+ * KV is only eventually consistent, and in particular caches "key not found"
+ * for a while, so a key written earlier in a run can still read back as
+ * missing later in that same run. This wrapper makes a run always see its own
+ * writes, so nothing is announced twice within one run (e.g. if PandaScore
+ * lists the same match twice).
+ */
+function rememberOwnWrites(kv: KVNamespace): KVNamespace {
+    const written = new Map<string, string>();
+    return {
+        get: async (key: string) => written.get(key) ?? kv.get(key),
+        put: async (key: string, value: string, options?: KVNamespacePutOptions) => {
+            written.set(key, value);
+            await kv.put(key, value, options);
+        },
+    } as unknown as KVNamespace;
+}
+
+export async function handleCron(baseEnv: Env, cron?: string) {
     console.log(`Cron job started (trigger: ${cron})...`);
+
+    const env: Env = { ...baseEnv, NOTIFICATIONS_KV: rememberOwnWrites(baseEnv.NOTIFICATIONS_KV) };
 
     const maps = await buildSubscriberMaps(env);
     if (!maps) return;
 
     const bot = new Telegraf(env.TELEGRAM_BOT_TOKEN);
-    const pandaScoreClient = new PandaScoreClient(env);
+    const pandaScoreClient = new PandaScoreClient(baseEnv);
 
     /*
      * Everything runs on the single 1-minute trigger so a newly scheduled match
@@ -571,9 +607,19 @@ export async function handleCron(env: Env, cron?: string) {
      * two schedules firing in the same minute run concurrently, both pass the
      * KV dedup check before either writes, and every notification goes out twice.
      */
-    await processUpcomingMatches(env, bot, pandaScoreClient, maps);
-    await processLiveMatches(env, bot, pandaScoreClient, maps);
-    await processFinishedMatches(env, bot, pandaScoreClient, maps);
+    const steps: Array<[string, () => Promise<void>]> = [
+        ['upcoming', () => processUpcomingMatches(env, bot, pandaScoreClient, maps)],
+        ['live', () => processLiveMatches(env, bot, pandaScoreClient, maps)],
+        ['finished', () => processFinishedMatches(env, bot, pandaScoreClient, maps)],
+    ];
+    for (const [name, run] of steps) {
+        // One failing step (e.g. a PandaScore error on a single endpoint) must not cost the others their run.
+        try {
+            await run();
+        } catch (e) {
+            console.error(`[${name}] Step failed:`, e);
+        }
+    }
 
     console.log('Cron job finished.');
 }

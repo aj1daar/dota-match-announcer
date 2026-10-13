@@ -50,6 +50,7 @@ export interface Match {
   name: string;
   number_of_games?: number;
   winner: Team | null;
+  draw?: boolean;
   league: {
     name: string;
     image_url: string | null;

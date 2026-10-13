@@ -8,8 +8,8 @@ jest.mock('../src/pandascore');
 jest.mock('../src/db/utils');
 jest.mock('telegraf');
 
-const UPCOMING_CRON = '*/15 * * * *';
 const LIVE_CRON = '*/1 * * * *';
+const UPCOMING_CRON = LIVE_CRON;
 
 describe('handleCron', () => {
     let mockEnv: Env;
