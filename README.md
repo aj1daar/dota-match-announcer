@@ -32,6 +32,15 @@ This is a refactored version of the Dota 2 Match Announcer, implemented as a Clo
     ```
     (Enter your tokens when prompted)
 
+    Optionally set `ADMIN_TOKEN` to enable the admin/debug endpoints (`/setup-webhook`, `/webhook-info`, `/bot-info`, `/poll-updates`). Without it they answer 404. With it they require the token in a header:
+
+    ```bash
+    wrangler secret put ADMIN_TOKEN
+    curl -H "Authorization: Bearer <ADMIN_TOKEN>" https://<your-worker>/webhook-info
+    ```
+
+    The Telegram webhook itself needs no extra secret: it is registered with a secret token derived from `TELEGRAM_BOT_TOKEN`, and updates that do not carry it are rejected.
+
 4.  **Create D1 Database**
 
     Create a D1 database for your worker. Note the `database_id` returned.
