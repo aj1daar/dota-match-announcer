@@ -32,6 +32,16 @@ export interface Tournament {
   end_at: string | null;
 }
 
+export interface Serie {
+  id: number;
+  winner_id: number | null;
+  tournaments: Array<{
+    id: number;
+    begin_at: string | null;
+    end_at: string | null;
+  }>;
+}
+
 export interface Match {
   id: number;
   begin_at: string;
@@ -44,8 +54,10 @@ export interface Match {
     name: string;
     image_url: string | null;
   };
+  serie_id?: number | null;
   serie: {
     full_name: string;
+    winner_id?: number | null;
   };
   tournament_id?: number | null;
   tournament?: Tournament | null;
@@ -66,30 +78,6 @@ export interface Match {
     main: boolean;
   }>;
 }
-
-export interface StandingTeam {
-  id: number;
-  name: string;
-}
-
-export interface BracketStanding {
-  rank: number;
-  team: StandingTeam;
-  last_match: {
-    id: number;
-    status: string;
-    winner_id: number | null;
-  } | null;
-}
-
-export interface GroupStanding {
-  rank: number;
-  team: StandingTeam;
-  wins: number;
-  losses: number;
-}
-
-export type TournamentStanding = BracketStanding | GroupStanding;
 
 const TEAMS_CACHE_KEY = 'pandascore_teams_cache';
 const TEAMS_CACHE_TTL_SECONDS = 3600;
@@ -277,7 +265,7 @@ export class PandaScoreClient {
         return this.request<Match>(`/matches/${matchId}`);
     }
 
-    async getTournamentStandings(tournamentId: number): Promise<TournamentStanding[]> {
-        return this.requestRoot<TournamentStanding[]>(`/tournaments/${tournamentId}/standings`);
+    async getSerieById(serieId: number): Promise<Serie> {
+        return this.requestRoot<Serie>(`/series/${serieId}`);
     }
 }

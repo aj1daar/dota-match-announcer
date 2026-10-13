@@ -10,7 +10,7 @@ enabled = true
 invocation_logs = true
 
 [triggers]
-crons = ["*/1 * * * *", "*/15 * * * *"]
+crons = ["*/1 * * * *"]
 
 [vars]
 # TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN" # This should be set as a secret

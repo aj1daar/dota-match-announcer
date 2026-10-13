@@ -1,4 +1,4 @@
-import { PandaScoreClient, Team, Match, TournamentStanding } from '../src/pandascore';
+import { PandaScoreClient, Team, Match, Serie } from '../src/pandascore';
 import { Env } from '../src';
 
 describe('PandaScoreClient', () => {
@@ -216,24 +216,28 @@ describe('PandaScoreClient', () => {
         });
     });
 
-    describe('getTournamentStandings', () => {
-        it('should request the generic (non-/dota2) standings endpoint', async () => {
-            const mockStandings: TournamentStanding[] = [
-                { rank: 1, team: { id: 1, name: 'Team One' }, last_match: { id: 10, status: 'finished', winner_id: 1 } },
-                { rank: 2, team: { id: 2, name: 'Team Two' }, last_match: { id: 9, status: 'finished', winner_id: 1 } },
-            ];
-            fetchMock.mockResponseOnce(JSON.stringify(mockStandings));
+    describe('getSerieById', () => {
+        it('should request the generic (non-/dota2) series endpoint', async () => {
+            const mockSerie: Serie = {
+                id: 42,
+                winner_id: null,
+                tournaments: [
+                    { id: 1, begin_at: '2024-03-01T00:00:00Z', end_at: null },
+                    { id: 2, begin_at: '2024-03-10T00:00:00Z', end_at: null },
+                ],
+            };
+            fetchMock.mockResponseOnce(JSON.stringify(mockSerie));
 
-            const standings = await client.getTournamentStandings(42);
-            expect(standings).toEqual(mockStandings);
+            const serie = await client.getSerieById(42);
+            expect(serie).toEqual(mockSerie);
 
             const url = fetchMock.mock.calls[0][0] as string;
-            expect(url).toEqual('https://api.pandascore.co/tournaments/42/standings');
+            expect(url).toEqual('https://api.pandascore.co/series/42');
         });
 
         it('should throw an error if the API returns a non-200 response', async () => {
             fetchMock.mockResponseOnce('Not Found', { status: 404 });
-            await expect(client.getTournamentStandings(42)).rejects.toThrow(
+            await expect(client.getSerieById(42)).rejects.toThrow(
                 'PandaScore API error: 404 Not Found',
             );
         });

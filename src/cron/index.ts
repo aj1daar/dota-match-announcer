@@ -1,5 +1,5 @@
 import { Env } from '../index';
-import { PandaScoreClient, Match, Game, TournamentStanding } from '../pandascore';
+import { PandaScoreClient, Match, Game, Team } from '../pandascore';
 import { getDb } from '../db/utils';
 import { Subscriber } from '../db/utils';
 import { Telegraf } from 'telegraf';
@@ -10,6 +10,7 @@ import { buildIcsCalendar } from '../utils/ics';
 interface SubscriberMaps {
     teamIdToSubscriberIds: Map<number, Set<number>>;
     subscriberIdToTelegramId: Map<number, number>;
+    telegramIdToTeamIds: Map<number, Set<number>>;
     allSubscribers: Subscriber[];
     uniqueTeamIds: number[];
 }
@@ -30,16 +31,25 @@ async function buildSubscriberMaps(env: Env): Promise<SubscriberMaps | null> {
     }
 
     const teamIdToSubscriberIds = new Map<number, Set<number>>();
+    const telegramIdToTeamIds = new Map<number, Set<number>>();
     for (const sub of allSubscriptions) {
         if (!teamIdToSubscriberIds.has(sub.teamId)) {
             teamIdToSubscriberIds.set(sub.teamId, new Set<number>());
         }
         teamIdToSubscriberIds.get(sub.teamId)?.add(sub.subscriberId);
+
+        const telegramId = subscriberIdToTelegramId.get(sub.subscriberId);
+        if (!telegramId) continue;
+        if (!telegramIdToTeamIds.has(telegramId)) {
+            telegramIdToTeamIds.set(telegramId, new Set<number>());
+        }
+        telegramIdToTeamIds.get(telegramId)?.add(sub.teamId);
     }
 
     return {
         teamIdToSubscriberIds,
         subscriberIdToTelegramId,
+        telegramIdToTeamIds,
         allSubscribers,
         uniqueTeamIds: Array.from(teamIdToSubscriberIds.keys()),
     };
@@ -79,7 +89,22 @@ function formatSeriesScore(match: Match): string {
     return `${escapeHtml(team1.name)} ${score1} – ${score2} ${escapeHtml(team2.name)}`;
 }
 
-function formatMapResultMessage(match: Match, game: Game): string {
+/*
+ * The team a recipient is rooting for in this match, so results can be worded
+ * from their side ("lost Map 1" instead of the opponent "wins Map 1"). Null
+ * when they follow both teams (or neither), where neutral wording is the only
+ * one that makes sense.
+ */
+function getFollowedTeam(match: Match, telegramId: number, maps: SubscriberMaps): Team | null {
+    const followedTeamIds = maps.telegramIdToTeamIds.get(telegramId);
+    if (!followedTeamIds) return null;
+    const followed = match.opponents
+        .map(o => o.opponent)
+        .filter((team): team is Team => !!team && followedTeamIds.has(team.id));
+    return followed.length === 1 ? followed[0] : null;
+}
+
+function formatMapResultMessage(match: Match, game: Game, followedTeam: Team | null): string {
     const team1 = escapeHtml(match.opponents[0]?.opponent?.name || 'TBD');
     const team2 = escapeHtml(match.opponents[1]?.opponent?.name || 'TBD');
     const winnerName = escapeHtml(match.opponents.find(o => o.opponent?.id === game.winner?.id)?.opponent?.name || 'Unknown');
@@ -87,17 +112,22 @@ function formatMapResultMessage(match: Match, game: Game): string {
     const league = escapeHtml(match.league.name);
     const serie = escapeHtml(match.serie.full_name);
 
+    let resultLine = `✅ <b>${winnerName}</b> wins Map ${game.position}!`;
+    if (followedTeam && followedTeam.id !== game.winner?.id) {
+        resultLine = `❌ <b>${escapeHtml(followedTeam.name)}</b> lost Map ${game.position}.`;
+    }
+
     return `\
 🎮 <b>Map ${game.position} Result</b>
 
 <b>${team1}</b> vs <b>${team2}</b>
-✅ <b>${winnerName}</b> wins Map ${game.position}!
+${resultLine}
 📊 Series: ${seriesScore}
 
 🏆 ${league} - ${serie}`;
 }
 
-function formatFinalResultMessage(match: Match): string {
+function formatFinalResultMessage(match: Match, followedTeam: Team | null): string {
     const team1 = match.opponents[0]?.opponent;
     const team2 = match.opponents[1]?.opponent;
     const team1Name = escapeHtml(team1?.name || 'TBD');
@@ -114,137 +144,134 @@ function formatFinalResultMessage(match: Match): string {
     const league = escapeHtml(match.league.name);
     const serie = escapeHtml(match.serie.full_name);
 
+    let resultLine = `🏆 <b>${winnerName}</b> wins the series ${score1}–${score2}!`;
+    if (followedTeam && followedTeam.id !== match.winner?.id) {
+        // Lead with the followed team's own score, e.g. "lost the series 1–2".
+        const [ownScore, otherScore] = followedTeam.id === team1?.id ? [score1, score2] : [score2, score1];
+        resultLine = `💔 <b>${escapeHtml(followedTeam.name)}</b> lost the series ${ownScore}–${otherScore}.`;
+    }
+
     return `\
 🏁 <b>Match Over</b>
 
 <b>${team1Name}</b> vs <b>${team2Name}</b>
-🏆 <b>${winnerName}</b> wins the series ${score1}–${score2}!
+${resultLine}
 
 🏆 ${league} - ${serie}`;
 }
 
-function formatTournamentResultMessage(
-    teamName: string,
-    tournamentName: string,
-    isChampion: boolean,
-    rank: number,
-): string {
-    const escapedTeamName = escapeHtml(teamName);
-    const escapedTournamentName = escapeHtml(tournamentName);
-
-    if (isChampion) {
-        return `\
-🏆 <b>Champions!</b>
-
-<b>${escapedTeamName}</b> won the tournament!
-
-🎉 ${escapedTournamentName}`;
-    }
+function formatChampionMessage(match: Match, teamName: string): string {
+    const league = escapeHtml(match.league.name);
+    const serie = escapeHtml(match.serie.full_name);
 
     return `\
-🥊 <b>Tournament Result</b>
+🏆 <b>Champions!</b>
 
-<b>${escapedTeamName}</b> finished in place #${rank}.
+<b>${escapeHtml(teamName)}</b> won the tournament!
 
-🏆 ${escapedTournamentName}`;
+🎉 ${league} - ${serie}`;
 }
 
-async function hasRemainingTournamentMatches(
+/*
+ * PandaScore models every stage of an event (group stage, playoffs, ...) as its
+ * own "tournament" under one serie, so a tournament winner is only the event
+ * champion if that tournament is the serie's last stage. Returns null when that
+ * can't be determined yet, so the caller can retry on a later run.
+ */
+async function isFinalStageOfSerie(
     pandaScoreClient: PandaScoreClient,
-    teamId: number,
-    tournamentId: number,
-): Promise<boolean> {
+    match: Match,
+): Promise<boolean | null> {
+    const tournament = match.tournament;
+    if (!tournament || !match.serie_id) return null;
+
     try {
-        const [upcoming, running] = await Promise.all([
-            pandaScoreClient.getUpcomingMatches([teamId]),
-            pandaScoreClient.getRunningMatches([teamId]),
-        ]);
-        return [...upcoming, ...running].some(m => m.tournament_id === tournamentId);
-    } catch (e) {
-        console.error(
-            `[tournament] Failed to verify remaining matches for team ${teamId} in tournament ${tournamentId}:`,
-            e,
+        const serie = await pandaScoreClient.getSerieById(match.serie_id);
+        const stages = serie.tournaments || [];
+        const current = stages.find(t => t.id === tournament.id);
+        if (!current?.begin_at) return null;
+
+        const currentStart = new Date(current.begin_at).getTime();
+        // Stages starting alongside this one (parallel groups) can't be told apart, so none counts as the final.
+        return stages.every(
+            t => t.id === current.id || (!!t.begin_at && new Date(t.begin_at).getTime() < currentStart),
         );
-        // Fail safe: if we can't confirm the team is actually done, don't lock in a placement yet.
-        return true;
+    } catch (e) {
+        console.error(`[tournament] Failed to fetch serie ${match.serie_id}:`, e);
+        return null;
     }
 }
 
-async function announceTournamentResults(
+/*
+ * Only the event win is announced. Placements are deliberately not: mid-event
+ * standings are not final (an upper-bracket loss is not an elimination, and a
+ * finished stage is not a finished event), which used to produce bogus
+ * "finished in place #N" messages.
+ */
+async function announceChampion(
     env: Env,
     bot: Telegraf,
     pandaScoreClient: PandaScoreClient,
     match: Match,
     maps: SubscriberMaps,
-    standingsCache: Map<number, TournamentStanding[] | null>,
 ): Promise<void> {
-    const tournamentId = match.tournament_id;
+    const winner = match.winner;
     const tournament = match.tournament;
-    if (!tournamentId || !tournament) return;
+    if (!winner?.id || !tournament) return;
 
-    if (!standingsCache.has(tournamentId)) {
+    const subscriberIds = maps.teamIdToSubscriberIds.get(winner.id);
+    if (!subscriberIds) return;
+
+    const wonSerie = match.serie.winner_id === winner.id;
+    if (!wonSerie && tournament.winner_id !== winner.id) return;
+
+    const kvKey = `tournament_result_${tournament.id}_${winner.id}`;
+    if (await env.NOTIFICATIONS_KV.get(kvKey)) return;
+
+    if (!wonSerie) {
+        const notFinalKey = `tournament_not_final_${tournament.id}`;
+        if (await env.NOTIFICATIONS_KV.get(notFinalKey)) return;
+
+        const isFinalStage = await isFinalStageOfSerie(pandaScoreClient, match);
+        if (isFinalStage === null) return;
+        if (!isFinalStage) {
+            await env.NOTIFICATIONS_KV.put(notFinalKey, 'true', { expirationTtl: 86400 });
+            return;
+        }
+    }
+
+    const message = formatChampionMessage(match, winner.name);
+    for (const subId of subscriberIds) {
+        const telegramId = maps.subscriberIdToTelegramId.get(subId);
+        if (!telegramId) continue;
         try {
-            const standings = await pandaScoreClient.getTournamentStandings(tournamentId);
-            standingsCache.set(tournamentId, standings);
+            await bot.telegram.sendMessage(telegramId, message, { parse_mode: 'HTML' });
         } catch (e) {
-            console.error(`[tournament] Failed to fetch standings for tournament ${tournamentId}:`, e);
-            standingsCache.set(tournamentId, null);
+            console.error(`[tournament] Failed to send champion message to ${telegramId}:`, e);
         }
     }
-    const standings = standingsCache.get(tournamentId);
-    if (!standings) return;
 
-    const tournamentEnded = !!tournament.end_at && new Date(tournament.end_at).getTime() <= Date.now();
+    await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 2592000 });
+    console.log(`[tournament] Announced team ${winner.id} as champion of tournament ${tournament.id}`);
+}
 
-    /*
-     * Scan every entry in the standings, not just the two teams in the match that
-     * triggered this call. A team eliminated earlier in the tournament (e.g. in
-     * the group stage) never has a last_match that lines up with whatever match
-     * just finished, so it can only ever be resolved via the tournament-ended check.
-     * That same tournament-ended check also acts as a safety net for a team whose
-     * own elimination match was somehow missed (cron downtime, API lag): it isn't
-     * tied to !lastMatch, so once the tournament is over, everyone still
-     * unresolved gets picked up here instead of staying invisible forever.
-     */
-    for (const entry of standings) {
-        const teamId = entry.team.id;
-        if (!maps.teamIdToSubscriberIds.has(teamId)) continue;
-
-        const kvKey = `tournament_result_${tournamentId}_${teamId}`;
-        const alreadyNotified = await env.NOTIFICATIONS_KV.get(kvKey);
-        if (alreadyNotified) continue;
-
-        const lastMatch = 'last_match' in entry ? entry.last_match : undefined;
-
-        const isChampion = tournament.winner_id === teamId;
-        const isBracketElimination =
-            !!lastMatch &&
-            lastMatch.id === match.id &&
-            lastMatch.winner_id !== teamId;
-        const isFinalByTournamentEnd = tournamentEnded;
-
-        if (!isChampion && !isBracketElimination && !isFinalByTournamentEnd) continue;
-
-        if (isFinalByTournamentEnd && !isChampion && !isBracketElimination) {
-            const stillScheduled = await hasRemainingTournamentMatches(pandaScoreClient, teamId, tournamentId);
-            if (stillScheduled) continue;
+async function announceFinalResult(
+    env: Env,
+    bot: Telegraf,
+    match: Match,
+    maps: SubscriberMaps,
+): Promise<void> {
+    for (const telegramId of getTelegramIdsForMatch(match, maps)) {
+        try {
+            const message = formatFinalResultMessage(match, getFollowedTeam(match, telegramId, maps));
+            await bot.telegram.sendMessage(telegramId, message, { parse_mode: 'HTML' });
+        } catch (e) {
+            console.error(`[finished] Failed to send final result to ${telegramId}:`, e);
         }
-
-        const message = formatTournamentResultMessage(entry.team.name, tournament.name, isChampion, entry.rank);
-        const subscriberIds = maps.teamIdToSubscriberIds.get(teamId) || new Set<number>();
-        for (const subId of subscriberIds) {
-            const telegramId = maps.subscriberIdToTelegramId.get(subId);
-            if (!telegramId) continue;
-            try {
-                await bot.telegram.sendMessage(telegramId, message, { parse_mode: 'HTML' });
-            } catch (e) {
-                console.error(`[tournament] Failed to send result to ${telegramId}:`, e);
-            }
-        }
-
-        await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 2592000 });
-        console.log(`[tournament] Notified result for team ${teamId} in tournament ${tournamentId}`);
     }
+
+    await env.NOTIFICATIONS_KV.put(`match_final_${match.id}`, 'true', { expirationTtl: 86400 });
+    console.log(`[finished] Notified final result for match ${match.id}`);
 }
 
 async function processFinishedMatches(
@@ -255,41 +282,33 @@ async function processFinishedMatches(
 ): Promise<void> {
     const finishedMatches = await pandaScoreClient.getRecentlyFinishedMatches(maps.uniqueTeamIds);
     console.log(`[finished] Found ${finishedMatches.length} recently finished matches`);
-    const standingsCache = new Map<number, TournamentStanding[] | null>();
 
     for (let match of finishedMatches) {
-        const kvKey = `match_final_${match.id}`;
-        const alreadyNotified = await env.NOTIFICATIONS_KV.get(kvKey);
-        if (alreadyNotified) continue;
+        const alreadyNotified = await env.NOTIFICATIONS_KV.get(`match_final_${match.id}`);
 
-        if (!match.winner?.id) {
-            console.log(`[finished] Winner not yet available for match ${match.id}, re-fetching...`);
-            try {
-                match = await pandaScoreClient.getMatchById(match.id);
-            } catch (e) {
-                console.error(`[finished] Re-fetch failed for match ${match.id}:`, e);
-            }
+        if (!alreadyNotified) {
             if (!match.winner?.id) {
-                console.log(`[finished] Still no winner for match ${match.id}, skipping until next run`);
-                continue;
+                console.log(`[finished] Winner not yet available for match ${match.id}, re-fetching...`);
+                try {
+                    match = await pandaScoreClient.getMatchById(match.id);
+                } catch (e) {
+                    console.error(`[finished] Re-fetch failed for match ${match.id}:`, e);
+                }
+                if (!match.winner?.id) {
+                    console.log(`[finished] Still no winner for match ${match.id}, skipping until next run`);
+                    continue;
+                }
             }
+
+            await announceFinalResult(env, bot, match, maps);
         }
 
-        const telegramIds = getTelegramIdsForMatch(match, maps);
-        const message = formatFinalResultMessage(match);
-
-        for (const telegramId of telegramIds) {
-            try {
-                await bot.telegram.sendMessage(telegramId, message, { parse_mode: 'HTML' });
-            } catch (e) {
-                console.error(`[finished] Failed to send final result to ${telegramId}:`, e);
-            }
-        }
-
-        await env.NOTIFICATIONS_KV.put(kvKey, 'true', { expirationTtl: 86400 });
-        console.log(`[finished] Notified final result for match ${match.id}`);
-
-        await announceTournamentResults(env, bot, pandaScoreClient, match, maps, standingsCache);
+        /*
+         * Checked on every run while the match is still in the recently-finished
+         * window, not just the one that sent the final result: PandaScore can
+         * take a while to set the tournament/serie winner after the last match.
+         */
+        await announceChampion(env, bot, pandaScoreClient, match, maps);
     }
 }
 
@@ -313,10 +332,10 @@ async function processLiveMatches(
             if (alreadyNotified) continue;
 
             const telegramIds = getTelegramIdsForMatch(match, maps);
-            const message = formatMapResultMessage(match, game);
 
             for (const telegramId of telegramIds) {
                 try {
+                    const message = formatMapResultMessage(match, game, getFollowedTeam(match, telegramId, maps));
                     await bot.telegram.sendMessage(telegramId, message, { parse_mode: 'HTML' });
                 } catch (e) {
                     console.error(`[live] Failed to send map result to ${telegramId}:`, e);
@@ -546,11 +565,11 @@ export async function handleCron(env: Env, cron?: string) {
     const pandaScoreClient = new PandaScoreClient(env);
 
     /*
-     * Run on every trigger (both the 1-minute and 15-minute schedules) so a
-     * newly scheduled match - e.g. the next round after a team advances - gets
-     * announced within a minute of PandaScore publishing it, not up to 15
-     * minutes later. Each sub-step is independently deduped via KV, so running
-     * it more often than strictly necessary on the 15-minute tick is harmless.
+     * Everything runs on the single 1-minute trigger so a newly scheduled match
+     * - e.g. the next round after a team advances - gets announced within a
+     * minute of PandaScore publishing it. There must be only one cron schedule:
+     * two schedules firing in the same minute run concurrently, both pass the
+     * KV dedup check before either writes, and every notification goes out twice.
      */
     await processUpcomingMatches(env, bot, pandaScoreClient, maps);
     await processLiveMatches(env, bot, pandaScoreClient, maps);
